@@ -1,0 +1,33 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: barkboys-db
+    environment:
+      POSTGRES_DB: growthsignal
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - barkboys_db_data:/var/lib/postgresql/data
+
+  api:
+    build: .
+    container_name: barkboys-api
+    depends_on:
+      - db
+    environment:
+      GS_DATABASE_URL: postgresql+psycopg2://postgres:postgres@db:5432/growthsignal
+      GS_API_KEY: barkboys-test-key
+      GS_CORS_ORIGINS: http://localhost:8000
+      GS_ESTIMATOR_USER: demo
+      GS_ESTIMATOR_PASSWORD: demo123
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      GS_OPENAI_API_KEY: ${GS_OPENAI_API_KEY:-}
+      GS_OPENAI_VISION_MODEL: ${GS_OPENAI_VISION_MODEL:-gpt-4.1}
+      GS_ALLOW_FALLBACK_HANDWRITTEN_MEASUREMENT_OCR: ${GS_ALLOW_FALLBACK_HANDWRITTEN_MEASUREMENT_OCR:-1}
+    ports:
+      - "8000:8000"
+
+volumes:
+  barkboys_db_data:

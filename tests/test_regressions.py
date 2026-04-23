@@ -184,6 +184,35 @@ class BarkboysRegressionTests(unittest.TestCase):
         self.assertIn('Use Quick Entry below to continue now, or Replace Image to retry.', html)
         self.assertIn('Image parsing did not produce usable rows. Paste dimensions here with commas or new lines to continue immediately.', html)
 
+    def test_estimator_quote_id_boot_path_wins_over_other_modes(self) -> None:
+        html = self.ESTIMATOR_HTML_PATH.read_text()
+        boot_start = html.index("(async () => {")
+        boot_source = html[boot_start:html.index("</script>", boot_start)]
+
+        self.assertIn('const quoteId = params.get("quote_id");', boot_source)
+        self.assertIn('const forceNewQuote = !quoteId && params.get("new") === "1";', boot_source)
+        self.assertIn('const intakeId = quoteId ? null : params.get("intake_id");', boot_source)
+        self.assertIn("setLeadSearchVisible(!shouldHideLeadSearch);", boot_source)
+        self.assertIn("if (!quoteId) {\n        await refreshLeads();\n      }", boot_source)
+        routing_start = boot_source.index("if (intakeId) {")
+        routing_source = boot_source[routing_start:]
+        self.assertLess(routing_source.index("} else if (quoteId) {"), routing_source.index("} else {"))
+        self.assertIn("await loadSavedQuote(quoteId);", boot_source)
+
+    def test_estimator_delivery_manual_mode_locks_until_reset(self) -> None:
+        html = self.ESTIMATOR_HTML_PATH.read_text()
+
+        self.assertIn('const DELIVERY_MANUAL_MESSAGE = "Delivery is manually set. Click Reset Delivery to recalculate.";', html)
+        self.assertIn('let deliveryMode = "auto";', html)
+        self.assertIn('function setDeliveryMode(nextMode, options = {})', html)
+        self.assertIn('function resetDelivery()', html)
+        self.assertIn('if (typeof deliveryMode !== "undefined" && deliveryMode === "manual" && !options.force)', html)
+        self.assertIn('function bindDeliveryAmountInput(node, index, fieldName)', html)
+        self.assertIn('node.addEventListener("change", handler);', html)
+        self.assertIn('quoteLines[index].min_charge = amount;', html)
+        self.assertIn('quoteLines[index].base_price = amount;', html)
+        self.assertIn('$("reset-delivery").addEventListener("click", resetDelivery);', html)
+
     def test_estimator_manual_recovery_button_uses_quick_entry_flow(self) -> None:
         html = self.ESTIMATOR_HTML_PATH.read_text()
 

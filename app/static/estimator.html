@@ -1026,6 +1026,7 @@
           <div class="actions" style="margin-top: 0; margin-bottom: 10px;">
             <button id="build-material-estimate" type="button" class="btn-primary btn-small">Build Material Estimate</button>
             <button id="update-material-estimate" type="button" class="btn-ghost btn-small hidden">Update Material Estimate</button>
+            <button id="reset-delivery" type="button" class="btn-ghost btn-small hidden">Reset Delivery</button>
             <span id="material-estimate-status" class="hint">Next: confirm yards, then click Build Material Estimate.</span>
           </div>
           <div id="material-plan-summary" class="status muted" style="margin-bottom: 10px; white-space: pre-line;">Material summary will appear here after you enter measurements or yards.</div>
@@ -1083,7 +1084,7 @@
       </div>
 
       <div class="stack">
-        <details class="card">
+        <details id="recent-crm-leads-panel" class="card">
           <summary class="crm-summary">
             <strong>Recent CRM Leads</strong>
             <span class="hint">Open only when you need to reload or update active leads.</span>
@@ -1333,6 +1334,7 @@
     const BLOWABLE_MATERIALS = new Set(Object.keys(BARKBOYS_MATERIAL_TABLES));
     const LIDAR_FILE_EXTENSIONS = new Set(["usdz", "ply", "obj", "las", "laz", "zip"]);
     const BED_PRIMARY_JOB_TYPES = new Set(["flower_bed_refresh", "topsoil_install", "mulch_refresh", "compost_refresh"]);
+    const DELIVERY_MANUAL_MESSAGE = "Delivery is manually set. Click Reset Delivery to recalculate.";
     const MATERIAL_PRIMARY_JOB_TYPE = {
       hemlock: "mulch_refresh",
       fir: "mulch_refresh",
@@ -1350,6 +1352,7 @@
     let currentQuoteId = null;
     let currentQuoteText = "";
     let currentQuoteTotal = 0;
+    let deliveryMode = "auto";
     let activeIntakeSubmissionId = null;
     let lastAiEstimate = null;
     let measurementReviewEntries = [];
@@ -2468,6 +2471,7 @@
       currentQuoteId = null;
       currentQuoteText = "";
       currentQuoteTotal = 0;
+      setDeliveryMode("auto", { render: false });
       lastAiEstimate = null;
       lastAutoEstimateSignature = "";
       activeIntakeSubmissionId = null;
@@ -2504,6 +2508,7 @@
       renderActiveIntake();
       renderMeasurementReview();
       setStatus("save-status", "", "muted");
+      updateDeliveryModeStatus();
       updatePhotoSelectionStatus();
       updateDeliveryFeeHint();
     }
@@ -2720,6 +2725,7 @@
         measurementReviewEntries: normalizeMeasurementReviewEntries(measurementReviewEntries),
         measurementSource: currentMeasurementSource(),
         quoteLines: collectItems().map(({ row, ...rest }) => rest),
+        deliveryMode,
         preview: lastPreviewData ? { data: lastPreviewData, source: lastPreviewSource } : null,
         ui: {
           measurementInlineExpanded,
@@ -2808,6 +2814,11 @@
         measurementSource = normalizeMeasurementSource(parsed.measurementSource) || deriveMeasurementSourceFromEntries(measurementReviewEntries);
         syncActiveMeasurementState(measurementSource);
         quoteLines = (Array.isArray(parsed.quoteLines) ? parsed.quoteLines : []).map((item) => normalizeQuoteLine(item));
+        if (typeof setDeliveryMode === "function") {
+          setDeliveryMode(parsed.deliveryMode, { render: false });
+        } else if (typeof deliveryMode !== "undefined") {
+          deliveryMode = parsed.deliveryMode === "manual" ? "manual" : "auto";
+        }
         lastPreviewData = parsed.preview?.data || null;
         lastPreviewSource = parsed.preview?.source || "";
         measurementInlineExpanded = parsed.ui?.measurementInlineExpanded === true;
@@ -3689,6 +3700,64 @@
       $("saved-quote-pill").classList.remove("hidden");
       $("saved-quote-pill").textContent = `Quote #${quoteId} saved`;
       setStatus("quote-action-status", extraMessage || `Quote #${quoteId} is ready for export and send actions.`, "ok");
+    }
+
+    function normalizeDeliveryMode(value) {
+      return value === "manual" ? "manual" : "auto";
+    }
+
+    function setDeliveryMode(nextMode, options = {}) {
+      deliveryMode = normalizeDeliveryMode(nextMode);
+      if (options.render !== false) {
+        updateDeliveryModeStatus();
+      }
+    }
+
+    function updateDeliveryModeStatus() {
+      const resetButton = $("reset-delivery");
+      const mode = typeof deliveryMode === "undefined" ? "auto" : deliveryMode;
+      if (resetButton) {
+        resetButton.classList.toggle("hidden", mode !== "manual");
+      }
+      if (mode === "manual") {
+        setStatus("material-estimate-status", DELIVERY_MANUAL_MESSAGE, "warn");
+      }
+    }
+
+    function isDeliveryLineItem(item = {}) {
+      const name = String(item.name || "").trim();
+      const unit = String(item.unit || "").trim().toLowerCase();
+      return isMaterialEstimateLineName(name)
+        || unit === "delivery"
+        || /\bdelivery\b/i.test(name);
+    }
+
+    function markDeliveryManual() {
+      setDeliveryMode("manual");
+    }
+
+    function resetDelivery() {
+      setDeliveryMode("auto", { render: false });
+      syncConfiguredQuoteLines({ force: true });
+      updateDeliveryFeeHint();
+      previewQuote();
+      setStatus("material-estimate-status", "Delivery reset to auto and recalculated from the current worksheet inputs.", "ok");
+    }
+
+    function setLeadSearchVisible(visible) {
+      const panel = $("recent-crm-leads-panel");
+      if (panel) {
+        panel.classList.toggle("hidden", !visible);
+      }
+      if (!visible) {
+        leadCache = [];
+        if ($("lead-list")) {
+          $("lead-list").innerHTML = "";
+        }
+        if ($("lead-status")) {
+          setStatus("lead-status", "", "muted");
+        }
+      }
     }
 
     function normalizeSiteMediaParseMode(value) {
@@ -5843,6 +5912,33 @@
       queueBrowserDraftSave();
     }
 
+    function bindDeliveryAmountInput(node, index, fieldName) {
+      const handler = (event) => {
+        const deliveryLine = isDeliveryLineItem(quoteLines[index]);
+        const amount = toNum(event.target.value);
+        if (deliveryLine) {
+          markDeliveryManual();
+        }
+        quoteLines[index][fieldName] = amount;
+        if (deliveryLine && fieldName === "base_price") {
+          quoteLines[index].min_charge = amount;
+          const minInput = node.closest(".item-row")?.querySelector(".item-min");
+          if (minInput && toNum(minInput.value) !== amount) {
+            minInput.value = formatInputNumber(amount);
+          }
+        } else if (deliveryLine && fieldName === "min_charge") {
+          quoteLines[index].base_price = amount;
+          const baseInput = node.closest(".item-row")?.querySelector(".item-base");
+          if (baseInput && toNum(baseInput.value) !== amount) {
+            baseInput.value = formatInputNumber(amount);
+          }
+        }
+        previewQuote();
+      };
+      node.addEventListener("input", handler);
+      node.addEventListener("change", handler);
+    }
+
     function renderQuoteLines() {
       itemsEl.innerHTML = "";
       quoteLines.forEach((item, index) => {
@@ -5873,18 +5969,9 @@
           quoteLines[index].unit = event.target.value.trim() || "delivery";
           previewQuote();
         });
-        node.querySelector(".item-base").addEventListener("input", (event) => {
-          quoteLines[index].base_price = toNum(event.target.value);
-          previewQuote();
-        });
-        node.querySelector(".item-per").addEventListener("input", (event) => {
-          quoteLines[index].per_unit_price = toNum(event.target.value);
-          previewQuote();
-        });
-        node.querySelector(".item-min").addEventListener("input", (event) => {
-          quoteLines[index].min_charge = toNum(event.target.value);
-          previewQuote();
-        });
+        bindDeliveryAmountInput(node.querySelector(".item-base"), index, "base_price");
+        bindDeliveryAmountInput(node.querySelector(".item-per"), index, "per_unit_price");
+        bindDeliveryAmountInput(node.querySelector(".item-min"), index, "min_charge");
         node.querySelector(".item-remove").addEventListener("click", () => {
           quoteLines.splice(index, 1);
           renderQuoteLines();
@@ -5897,6 +5984,7 @@
         $("update-material-estimate").disabled = !hasMaterialLine;
         $("update-material-estimate").classList.toggle("hidden", !hasMaterialLine);
       }
+      updateDeliveryModeStatus();
       queueBrowserDraftSave();
     }
 
@@ -6030,7 +6118,11 @@
       updateDeliveryFeeHint();
     }
 
-    function syncConfiguredQuoteLines() {
+    function syncConfiguredQuoteLines(options = {}) {
+      if (typeof deliveryMode !== "undefined" && deliveryMode === "manual" && !options.force) {
+        updateDeliveryModeStatus();
+        return;
+      }
       let materialDefaults = null;
       try {
         materialDefaults = buildMaterialLineDefaults();
@@ -6051,6 +6143,7 @@
         removeQuoteLine("placement");
       }
       renderQuoteLines();
+      updateDeliveryModeStatus();
     }
 
     function updateMaterialEstimateFromEditedLine() {
@@ -6126,6 +6219,11 @@
 
     function addSelectedTemplate() {
       ensureMaterialYardsValue();
+      if (typeof deliveryMode !== "undefined" && deliveryMode === "manual" && typeof findAutoLine === "function" && findAutoLine("material")) {
+        updateDeliveryModeStatus();
+        previewQuote();
+        return;
+      }
       let materialDefaults;
       try {
         materialDefaults = buildMaterialLineDefaults();
@@ -6152,6 +6250,11 @@
         });
       }
       ensureMaterialYardsValue();
+      if (typeof deliveryMode !== "undefined" && deliveryMode === "manual" && typeof findAutoLine === "function" && findAutoLine("material")) {
+        updateDeliveryModeStatus();
+        previewQuote();
+        return;
+      }
       const yards = resolvedMaterialYards();
       if (yards <= 0) {
         setStatus("material-estimate-status", "Enter the material volume from your table or confirmed measurements before building the estimate.", "warn");
@@ -6604,6 +6707,7 @@
 
         lastAiEstimate = null;
         activeIntakeSubmissionId = null;
+        setDeliveryMode("auto", { render: false });
         renderActiveIntake();
         restoreUploadedAssetsFromQuote(data);
         replaceItemsFromPricing(Array.isArray(data.items) ? data.items : []);
@@ -7184,6 +7288,7 @@
     $("recalculate-from-area").addEventListener("click", recalculateFromMeasuredAreaOverride);
     $("build-material-estimate").addEventListener("click", buildMaterialEstimatePreset);
     $("update-material-estimate").addEventListener("click", updateMaterialEstimateFromEditedLine);
+    $("reset-delivery").addEventListener("click", resetDelivery);
     if ($("upload-estimate")) {
       $("upload-estimate").addEventListener("click", uploadAndEstimate);
     }
@@ -7350,13 +7455,22 @@
     }
 
     (async () => {
+      const params = new URLSearchParams(window.location.search);
+      const quoteId = params.get("quote_id");
+      const forceNewQuote = !quoteId && params.get("new") === "1";
+      const intakeId = quoteId ? null : params.get("intake_id");
+      const shouldHideLeadSearch = Boolean(quoteId);
+
       resetSavedQuoteState();
       ensureDraftToken();
       restoreSiteMediaParseMode();
+      setLeadSearchVisible(!shouldHideLeadSearch);
       setDraftStatus("Draft will save in this browser as you work.");
       await loadPricingAssumptions();
       await loadTemplates();
-      await refreshLeads();
+      if (!quoteId) {
+        await refreshLeads();
+      }
       warnIfOfflineForNoteParsing();
       if (typeof window !== "undefined") {
         window.addEventListener("offline", () => {
@@ -7370,9 +7484,6 @@
           );
         });
       }
-      const params = new URLSearchParams(window.location.search);
-      const intakeId = params.get("intake_id");
-      const quoteId = params.get("quote_id");
       let cleanQuery = false;
 
       if (!intakeId && !quoteId) {
@@ -7392,8 +7503,12 @@
       } else if (quoteId) {
         await loadSavedQuote(quoteId);
       } else {
-        const restoredDraft = await restoreBrowserDraftState();
+        const restoredDraft = forceNewQuote ? false : await restoreBrowserDraftState();
         if (!restoredDraft) {
+          if (forceNewQuote) {
+            clearBrowserDraftState("Started a blank new quote.");
+            cleanQuery = true;
+          }
           logMediaEvent("quote reload", {
             source: "default empty state",
             beforeSiteMediaIds: siteMediaStableIds(),
