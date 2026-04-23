@@ -736,9 +736,9 @@
             <div class="field" style="grid-column: span 4;"><label for="sales-rep">Sales Rep</label><input id="sales-rep" placeholder="BarkBoys Sales" /></div>
           </div>
 
-          <details class="details-box">
+          <details id="admin-workflow-controls" class="details-box hidden" data-admin-only="true" hidden>
             <summary>
-              <strong>Advanced</strong>
+              <strong>Admin Workflow / Site Controls</strong>
               <span class="hint">Internal workflow, notes, overrides, and diagnostics.</span>
             </summary>
             <div class="row">
@@ -967,10 +967,10 @@
             </div>
           </div>
 
-          <details class="details-box">
+          <details id="admin-pricing-controls" class="details-box hidden" data-admin-only="true" hidden>
             <summary>
-              <strong>Pricing Options And Overrides</strong>
-              <span class="hint">Frequency, tax, table-price rows, and manual area override.</span>
+              <strong>Admin Pricing / Delivery Controls</strong>
+              <span class="hint">Internal frequency, tax, table-price rows, and manual area override.</span>
             </summary>
             <div class="row">
               <div class="field" style="grid-column: span 3;">
@@ -1334,7 +1334,9 @@
     const BLOWABLE_MATERIALS = new Set(Object.keys(BARKBOYS_MATERIAL_TABLES));
     const LIDAR_FILE_EXTENSIONS = new Set(["usdz", "ply", "obj", "las", "laz", "zip"]);
     const BED_PRIMARY_JOB_TYPES = new Set(["flower_bed_refresh", "topsoil_install", "mulch_refresh", "compost_refresh"]);
-    const DELIVERY_MANUAL_MESSAGE = "Delivery is manually set. Click Reset Delivery to recalculate.";
+    const DELIVERY_CITY_MANUAL_LABEL = "Manual city selection";
+    const DELIVERY_PRICE_MANUAL_LABEL = "Manual delivery price";
+    const DELIVERY_PRICE_MANUAL_MESSAGE = `${DELIVERY_PRICE_MANUAL_LABEL}. Click Reset Delivery to recalculate.`;
     const MATERIAL_PRIMARY_JOB_TYPE = {
       hemlock: "mulch_refresh",
       fir: "mulch_refresh",
@@ -1352,7 +1354,10 @@
     let currentQuoteId = null;
     let currentQuoteText = "";
     let currentQuoteTotal = 0;
+    let deliveryCitySource = "auto";
+    let deliveryPriceOverride = false;
     let deliveryMode = "auto";
+    let adminMode = false;
     let activeIntakeSubmissionId = null;
     let lastAiEstimate = null;
     let measurementReviewEntries = [];
@@ -2725,6 +2730,10 @@
         measurementReviewEntries: normalizeMeasurementReviewEntries(measurementReviewEntries),
         measurementSource: currentMeasurementSource(),
         quoteLines: collectItems().map(({ row, ...rest }) => rest),
+        delivery_city_source: deliveryCitySource,
+        delivery_price_override: deliveryPriceOverride,
+        deliveryCitySource,
+        deliveryPriceOverride,
         deliveryMode,
         preview: lastPreviewData ? { data: lastPreviewData, source: lastPreviewSource } : null,
         ui: {
@@ -2814,10 +2823,16 @@
         measurementSource = normalizeMeasurementSource(parsed.measurementSource) || deriveMeasurementSourceFromEntries(measurementReviewEntries);
         syncActiveMeasurementState(measurementSource);
         quoteLines = (Array.isArray(parsed.quoteLines) ? parsed.quoteLines : []).map((item) => normalizeQuoteLine(item));
-        if (typeof setDeliveryMode === "function") {
-          setDeliveryMode(parsed.deliveryMode, { render: false });
+        if (typeof setDeliveryCitySource === "function") {
+          const restoredCitySource = parsed.delivery_city_source
+            || parsed.deliveryCitySource
+            || (parsed.deliveryMode === "manual" && parsed.delivery_price_override !== true && parsed.deliveryPriceOverride !== true ? "manual" : "auto");
+          setDeliveryCitySource(restoredCitySource, { render: false });
+        }
+        if (typeof setDeliveryPriceOverride === "function") {
+          setDeliveryPriceOverride(parsed.delivery_price_override === true || parsed.deliveryPriceOverride === true, { render: false });
         } else if (typeof deliveryMode !== "undefined") {
-          deliveryMode = parsed.deliveryMode === "manual" ? "manual" : "auto";
+          deliveryMode = "auto";
         }
         lastPreviewData = parsed.preview?.data || null;
         lastPreviewSource = parsed.preview?.source || "";
@@ -3706,21 +3721,41 @@
       return value === "manual" ? "manual" : "auto";
     }
 
-    function setDeliveryMode(nextMode, options = {}) {
-      deliveryMode = normalizeDeliveryMode(nextMode);
+    function normalizeDeliveryCitySource(value) {
+      return value === "manual" ? "manual" : "auto";
+    }
+
+    function syncLegacyDeliveryMode() {
+      deliveryMode = deliveryPriceOverride ? "manual" : "auto";
+    }
+
+    function setDeliveryCitySource(nextSource, options = {}) {
+      deliveryCitySource = normalizeDeliveryCitySource(nextSource);
       if (options.render !== false) {
         updateDeliveryModeStatus();
       }
     }
 
+    function setDeliveryPriceOverride(isOverridden, options = {}) {
+      deliveryPriceOverride = isOverridden === true;
+      syncLegacyDeliveryMode();
+      if (options.render !== false) {
+        updateDeliveryModeStatus();
+      }
+    }
+
+    function setDeliveryMode(nextMode, options = {}) {
+      setDeliveryPriceOverride(normalizeDeliveryMode(nextMode) === "manual", options);
+    }
+
     function updateDeliveryModeStatus() {
       const resetButton = $("reset-delivery");
-      const mode = typeof deliveryMode === "undefined" ? "auto" : deliveryMode;
+      const priceIsManual = deliveryPriceOverride === true;
       if (resetButton) {
-        resetButton.classList.toggle("hidden", mode !== "manual");
+        resetButton.classList.toggle("hidden", !priceIsManual);
       }
-      if (mode === "manual") {
-        setStatus("material-estimate-status", DELIVERY_MANUAL_MESSAGE, "warn");
+      if (priceIsManual) {
+        setStatus("material-estimate-status", DELIVERY_PRICE_MANUAL_MESSAGE, "warn");
       }
     }
 
@@ -3732,12 +3767,16 @@
         || /\bdelivery\b/i.test(name);
     }
 
+    function markDeliveryPriceManual() {
+      setDeliveryPriceOverride(true);
+    }
+
     function markDeliveryManual() {
-      setDeliveryMode("manual");
+      markDeliveryPriceManual();
     }
 
     function resetDelivery() {
-      setDeliveryMode("auto", { render: false });
+      setDeliveryPriceOverride(false, { render: false });
       syncConfiguredQuoteLines({ force: true });
       updateDeliveryFeeHint();
       previewQuote();
@@ -3758,6 +3797,32 @@
           setStatus("lead-status", "", "muted");
         }
       }
+    }
+
+    function detectAdminMode(params = null) {
+      const query = params || (typeof window !== "undefined" ? new URLSearchParams(window.location.search) : new URLSearchParams());
+      const queryFlag = ["admin", "admin_mode", "internal"].some((key) => {
+        const value = String(query.get(key) || "").trim().toLowerCase();
+        return ["1", "true", "yes"].includes(value);
+      });
+      const globalUserIsAdmin = typeof currentUser !== "undefined" && currentUser?.is_admin === true;
+      const globalAdminMode = typeof window !== "undefined" && window.BARKBOYS_ADMIN_MODE === true;
+      return queryFlag || globalUserIsAdmin || globalAdminMode || adminMode === true;
+    }
+
+    function showAdvancedOptions() {
+      return detectAdminMode();
+    }
+
+    function updateAdvancedPricingControlsVisibility() {
+      const visible = showAdvancedOptions();
+      document.querySelectorAll('[data-admin-only="true"]').forEach((controls) => {
+        controls.classList.toggle("hidden", !visible);
+        controls.toggleAttribute("hidden", !visible);
+        if (!visible && "open" in controls) {
+          controls.open = false;
+        }
+      });
     }
 
     function normalizeSiteMediaParseMode(value) {
@@ -5501,13 +5566,14 @@
       }
       const miles = estimateDistanceMiles([address, zipCode].filter(Boolean).join(" ").trim());
       const tier = estimatedDeliveryTier(miles);
+      const sourcePrefix = deliveryCitySource === "manual" ? `${DELIVERY_CITY_MANUAL_LABEL}. ` : "";
       if (!tier) {
         summaryEl.className = "status muted";
-        summaryEl.textContent = `Estimated route from ${BARKBOYS_HQ_LABEL} to the customer is about ${formatInputNumber(miles)} miles.`;
+        summaryEl.textContent = `${sourcePrefix}Estimated route from ${BARKBOYS_HQ_LABEL} to the customer is about ${formatInputNumber(miles)} miles.`;
         return;
       }
       summaryEl.className = "status ok";
-      summaryEl.textContent = `Estimated route from ${BARKBOYS_HQ_LABEL} to the customer is about ${formatInputNumber(miles)} miles, matching the BarkBoys ${tier.label} delivery tier (${money(tier.blower_delivery_fee)} base delivery). BarkBoys table-priced material loads already include delivery in that table price.`;
+      summaryEl.textContent = `${sourcePrefix}Estimated route from ${BARKBOYS_HQ_LABEL} to the customer is about ${formatInputNumber(miles)} miles, matching the BarkBoys ${tier.label} delivery tier (${money(tier.blower_delivery_fee)} base delivery). BarkBoys table-priced material loads already include delivery in that table price.`;
     }
 
     function normalizedBlowerMaterial(value) {
@@ -5917,7 +5983,7 @@
         const deliveryLine = isDeliveryLineItem(quoteLines[index]);
         const amount = toNum(event.target.value);
         if (deliveryLine) {
-          markDeliveryManual();
+          markDeliveryPriceManual();
         }
         quoteLines[index][fieldName] = amount;
         if (deliveryLine && fieldName === "base_price") {
@@ -6119,7 +6185,7 @@
     }
 
     function syncConfiguredQuoteLines(options = {}) {
-      if (typeof deliveryMode !== "undefined" && deliveryMode === "manual" && !options.force) {
+      if (deliveryPriceOverride === true && !options.force) {
         updateDeliveryModeStatus();
         return;
       }
@@ -6219,7 +6285,7 @@
 
     function addSelectedTemplate() {
       ensureMaterialYardsValue();
-      if (typeof deliveryMode !== "undefined" && deliveryMode === "manual" && typeof findAutoLine === "function" && findAutoLine("material")) {
+      if (deliveryPriceOverride === true && typeof findAutoLine === "function" && findAutoLine("material")) {
         updateDeliveryModeStatus();
         previewQuote();
         return;
@@ -6250,7 +6316,7 @@
         });
       }
       ensureMaterialYardsValue();
-      if (typeof deliveryMode !== "undefined" && deliveryMode === "manual" && typeof findAutoLine === "function" && findAutoLine("material")) {
+      if (deliveryPriceOverride === true && typeof findAutoLine === "function" && findAutoLine("material")) {
         updateDeliveryModeStatus();
         previewQuote();
         return;
@@ -7460,11 +7526,13 @@
       const forceNewQuote = !quoteId && params.get("new") === "1";
       const intakeId = quoteId ? null : params.get("intake_id");
       const shouldHideLeadSearch = Boolean(quoteId);
+      adminMode = detectAdminMode(params);
 
       resetSavedQuoteState();
       ensureDraftToken();
       restoreSiteMediaParseMode();
       setLeadSearchVisible(!shouldHideLeadSearch);
+      updateAdvancedPricingControlsVisibility();
       setDraftStatus("Draft will save in this browser as you work.");
       await loadPricingAssumptions();
       await loadTemplates();

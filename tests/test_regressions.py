@@ -202,16 +202,43 @@ class BarkboysRegressionTests(unittest.TestCase):
     def test_estimator_delivery_manual_mode_locks_until_reset(self) -> None:
         html = self.ESTIMATOR_HTML_PATH.read_text()
 
-        self.assertIn('const DELIVERY_MANUAL_MESSAGE = "Delivery is manually set. Click Reset Delivery to recalculate.";', html)
+        self.assertIn('const DELIVERY_CITY_MANUAL_LABEL = "Manual city selection";', html)
+        self.assertIn('const DELIVERY_PRICE_MANUAL_LABEL = "Manual delivery price";', html)
+        self.assertIn("const DELIVERY_PRICE_MANUAL_MESSAGE = `${DELIVERY_PRICE_MANUAL_LABEL}. Click Reset Delivery to recalculate.`;", html)
+        self.assertIn('let deliveryCitySource = "auto";', html)
+        self.assertIn('let deliveryPriceOverride = false;', html)
         self.assertIn('let deliveryMode = "auto";', html)
+        self.assertIn('function setDeliveryCitySource(nextSource, options = {})', html)
+        self.assertIn('function setDeliveryPriceOverride(isOverridden, options = {})', html)
         self.assertIn('function setDeliveryMode(nextMode, options = {})', html)
         self.assertIn('function resetDelivery()', html)
-        self.assertIn('if (typeof deliveryMode !== "undefined" && deliveryMode === "manual" && !options.force)', html)
+        self.assertIn("setDeliveryCitySource(restoredCitySource, { render: false });", html)
+        self.assertIn("setDeliveryPriceOverride(parsed.delivery_price_override === true || parsed.deliveryPriceOverride === true, { render: false });", html)
+        self.assertIn('if (deliveryPriceOverride === true && !options.force)', html)
+        self.assertIn('if (deliveryPriceOverride === true && typeof findAutoLine === "function" && findAutoLine("material"))', html)
         self.assertIn('function bindDeliveryAmountInput(node, index, fieldName)', html)
         self.assertIn('node.addEventListener("change", handler);', html)
+        self.assertIn('markDeliveryPriceManual();', html)
         self.assertIn('quoteLines[index].min_charge = amount;', html)
         self.assertIn('quoteLines[index].base_price = amount;', html)
         self.assertIn('$("reset-delivery").addEventListener("click", resetDelivery);', html)
+
+    def test_estimator_hides_admin_pricing_controls_from_normal_staff_flow(self) -> None:
+        html = self.ESTIMATOR_HTML_PATH.read_text()
+
+        self.assertIn('id="admin-workflow-controls" class="details-box hidden" data-admin-only="true" hidden', html)
+        self.assertIn('id="admin-pricing-controls" class="details-box hidden" data-admin-only="true" hidden', html)
+        self.assertIn("Admin Workflow / Site Controls", html)
+        self.assertIn("Admin Pricing / Delivery Controls", html)
+        self.assertNotIn("<strong>Advanced</strong>", html)
+        self.assertNotIn("Pricing Options And Overrides", html)
+        self.assertIn("let adminMode = false;", html)
+        self.assertIn("function showAdvancedOptions()", html)
+        self.assertIn("function updateAdvancedPricingControlsVisibility()", html)
+        self.assertIn('adminMode = detectAdminMode(params);', html)
+        self.assertIn("updateAdvancedPricingControlsVisibility();", html)
+        self.assertIn('document.querySelectorAll(\'[data-admin-only="true"]\')', html)
+        self.assertIn('controls.toggleAttribute("hidden", !visible);', html)
 
     def test_estimator_manual_recovery_button_uses_quick_entry_flow(self) -> None:
         html = self.ESTIMATOR_HTML_PATH.read_text()
@@ -2159,6 +2186,9 @@ let measurementReviewEntries = [
 let measurementEditVisible = false;
 let measurementDetailsVisible = false;
 let quoteLines = [];
+let deliveryCitySource = "auto";
+let deliveryPriceOverride = false;
+let deliveryMode = "auto";
 let lastMaterialStatus = "";
 let lastPreviewData = null;
 let lastPreviewSource = "";
@@ -2329,6 +2359,9 @@ let measurementSource = "";
 let activeMeasurementRows = [];
 let confirmedMeasurementRows = [];
 let quoteLines = [];
+let deliveryCitySource = "auto";
+let deliveryPriceOverride = false;
+let deliveryMode = "auto";
 let lastPreviewData = null;
 let lastPreviewSource = "";
 let measurementInlineExpanded = false;
@@ -2473,6 +2506,9 @@ let activeMeasurementRows = [];
 let confirmedMeasurementRows = [];
 let measurementReviewEntries = [];
 let quoteLines = [];
+let deliveryCitySource = "auto";
+let deliveryPriceOverride = false;
+let deliveryMode = "auto";
 let lastPreviewData = null;
 let lastPreviewSource = "";
 let measurementInlineExpanded = false;
@@ -2827,6 +2863,9 @@ let measurementReviewEntries = [
   {{ entry_type: "dimension_pair", include: true, raw_text: "18 x 12", length_ft: 18, width_ft: 12 }},
 ];
 let quoteLines = [];
+let deliveryCitySource = "auto";
+let deliveryPriceOverride = false;
+let deliveryMode = "auto";
 let lastStatus = "";
 let previewData = null;
 const itemsEl = {{ querySelectorAll: () => [] }};
@@ -2964,6 +3003,9 @@ let measurementReviewEntries = [
   {{ entry_type: "dimension_pair", include: true, raw_text: "80.68x75", length_ft: 80.68, width_ft: 75 }}
 ];
 let quoteLines = [];
+let deliveryCitySource = "auto";
+let deliveryPriceOverride = false;
+let deliveryMode = "auto";
 let lastStatus = "";
 let previewData = null;
 const itemsEl = {{ querySelectorAll: () => quoteLines.map(() => null) }};
