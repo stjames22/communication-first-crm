@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>BarkBoys Customer Upload Imports</title>
+  <style>
+    :root {
+      --bg: #f5f8f6;
+      --card: #ffffff;
+      --ink: #14241b;
+      --muted: #56645d;
+      --line: #d8e1dc;
+      --brand: #1d6a3a;
+      --brand-dark: #15522d;
+      --danger: #b42318;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Avenir Next", "Segoe UI", sans-serif;
+      color: var(--ink);
+      background: radial-gradient(circle at 10% 0%, #eef6ef 0, var(--bg) 45%, #edf3f1 100%);
+      padding: 24px;
+    }
+
+    .wrap { max-width: 980px; margin: 0 auto; display: grid; gap: 16px; }
+    .page-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+    }
+    .page-copy { display: grid; gap: 8px; }
+    h1 { margin: 0; font-size: 2rem; }
+    p { margin: 0; color: var(--muted); }
+    .pill {
+      display: inline-flex;
+      width: fit-content;
+      padding: 6px 11px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: #fbfdfc;
+      color: var(--muted);
+      font-size: 0.82rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 18px;
+      box-shadow: 0 8px 20px rgba(20, 36, 27, 0.04);
+    }
+    .card-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    button, a.button {
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      padding: 10px 12px;
+      font-size: 0.94rem;
+      font-family: inherit;
+      text-decoration: none;
+      cursor: pointer;
+      font-weight: 700;
+      background: #fff;
+      color: var(--ink);
+    }
+    button.primary, a.button.primary {
+      background: var(--brand);
+      border-color: var(--brand);
+      color: #fff;
+    }
+    button.primary:hover, a.button.primary:hover { background: var(--brand-dark); }
+    .hint { font-size: 0.85rem; color: var(--muted); }
+    .status { min-height: 20px; font-size: 0.92rem; color: var(--muted); }
+    .ok { color: var(--brand); }
+    .error { color: var(--danger); }
+    .queue { display: grid; gap: 10px; }
+    .row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 12px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 14px;
+      background: #fbfdfc;
+    }
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    .meta span {
+      display: inline-flex;
+      align-items: center;
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--muted);
+      font-size: 0.82rem;
+    }
+
+    @media (max-width: 820px) {
+      .page-head { flex-direction: column; align-items: stretch; }
+      .row { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="page-head">
+      <div class="page-copy">
+        <span class="pill">Internal BarkBoys Use Only</span>
+        <h1>Customer Upload Imports</h1>
+        <p>This page is only for BarkBoys staff. It lists customer-submitted photo packages from the public form and opens them in the internal sales worksheet.</p>
+      </div>
+      <div class="actions">
+        <a class="button" href="/staff-estimator">Back To Sales Worksheet</a>
+        <a class="button" href="/staff-crm">Saved Quotes CRM</a>
+      </div>
+    </div>
+
+    <section class="card">
+      <div class="card-head">
+        <strong>Customer Upload Queue</strong>
+        <button id="refresh" type="button">Refresh</button>
+      </div>
+      <p class="hint">Each row below is one customer submission package. Use it only when a customer started from the public BarkBoys upload form.</p>
+      <div id="status" class="status">Loading customer uploads...</div>
+      <div id="queue" class="queue"></div>
+    </section>
+  </div>
+
+  <script>
+    const statusEl = document.getElementById("status");
+    const queueEl = document.getElementById("queue");
+
+    function setStatus(message, className = "") {
+      statusEl.textContent = message || "";
+      statusEl.className = className ? `status ${className}` : "status";
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
+    }
+
+    function formatDate(value) {
+      if (!value) return "Unknown date";
+      const date = new Date(value);
+      return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString();
+    }
+
+    async function refreshQueue() {
+      setStatus("Loading customer uploads...");
+      queueEl.innerHTML = "";
+      try {
+        const response = await fetch("/intake-submissions");
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.detail || "Could not load customer uploads.");
+        }
+
+        const items = Array.isArray(data) ? data : [];
+        if (!items.length) {
+          setStatus("No customer upload submissions yet.");
+          return;
+        }
+
+        queueEl.innerHTML = items.map((item) => {
+          const uploadCount = Number(item.media_count || 0);
+          return `
+            <div class="row">
+              <div>
+                <strong>${escapeHtml(item.customer_name || "Unknown customer")}</strong>
+                <div class="hint">${escapeHtml(item.address || "")}</div>
+                <div class="meta">
+                  <span>${escapeHtml(item.status || "new")}</span>
+                  <span>${escapeHtml(item.phone || item.email || "No contact")}</span>
+                  <span>${uploadCount} uploaded file${uploadCount === 1 ? "" : "s"}</span>
+                  <span>${escapeHtml(formatDate(item.created_at))}</span>
+                </div>
+              </div>
+              <div class="actions">
+                <a class="button primary" href="/staff-estimator?intake_id=${encodeURIComponent(item.id)}">Open In Sales Worksheet</a>
+              </div>
+            </div>
+          `;
+        }).join("");
+
+        setStatus(`Showing ${items.length} customer upload submission(s).`, "ok");
+      } catch (error) {
+        setStatus(error.message || "Could not load customer uploads.", "error");
+      }
+    }
+
+    document.getElementById("refresh").addEventListener("click", refreshQueue);
+    refreshQueue();
+  </script>
+</body>
+</html>

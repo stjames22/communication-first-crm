@@ -1,0 +1,592 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>BarkBoys Admin Pricing</title>
+  <style>
+    :root {
+      --bg: #f3f7f4;
+      --card: #fff;
+      --ink: #14241b;
+      --muted: #607067;
+      --line: #d8e2dc;
+      --brand: #1d6a3a;
+      --brand-dark: #15522d;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: "Avenir Next", "Segoe UI", sans-serif;
+      padding: 24px;
+    }
+    .wrap {
+      max-width: 1100px;
+      margin: 0 auto;
+      display: grid;
+      gap: 14px;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 16px;
+    }
+    .head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .btn {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fff;
+      color: var(--ink);
+      padding: 8px 12px;
+      font-weight: 700;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .btn-primary {
+      background: var(--brand);
+      color: #fff;
+      border-color: var(--brand);
+    }
+    .btn-primary:hover {
+      background: var(--brand-dark);
+    }
+    .status {
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      padding: 8px 10px;
+      font-size: 0.95rem;
+      color: var(--muted);
+      background: #f8fbf8;
+    }
+    .status.ok {
+      color: #185a31;
+      border-color: #bcdcc6;
+      background: #edf8f1;
+    }
+    .status.error {
+      color: #8b2424;
+      border-color: #f0c9c9;
+      background: #fff3f3;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.95rem;
+    }
+    .table-wrap {
+      overflow-x: auto;
+    }
+    th, td {
+      border: 1px solid var(--line);
+      padding: 8px;
+      text-align: left;
+      vertical-align: middle;
+    }
+    th {
+      background: #f4f8f5;
+      font-weight: 700;
+    }
+    input[type="text"],
+    input[type="number"],
+    select {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 7px 8px;
+      font: inherit;
+      background: #fff;
+    }
+    input[readonly] {
+      background: #f4f8f5;
+      color: #3d4d44;
+    }
+    .hint {
+      color: var(--muted);
+      font-size: 0.92rem;
+      margin: 0;
+    }
+    .grid {
+      display: grid;
+      gap: 10px;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    }
+    .field {
+      display: grid;
+      gap: 6px;
+    }
+    .field label {
+      font-size: 0.87rem;
+      color: var(--muted);
+      font-weight: 700;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <div class="head">
+        <div>
+          <h1 style="margin: 0 0 4px 0; font-size: 1.35rem;">BarkBoys Admin Pricing</h1>
+          <p class="hint">Update product costs and labor assumptions here. Changes apply to new estimates immediately.</p>
+        </div>
+        <div class="actions">
+          <a class="btn" href="/staff-estimator">Back To Staff Tool</a>
+          <button id="save-btn" class="btn btn-primary" type="button">Save All Changes</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="status" class="status">Loading admin pricing...</div>
+
+    <div class="card">
+      <h2 style="margin: 0 0 10px 0; font-size: 1.05rem;">Material Product Costs</h2>
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 18%;">Material Type</th>
+            <th style="width: 24%;">Label</th>
+            <th style="width: 18%;">Cost / Yard ($)</th>
+            <th style="width: 20%;">Delivery / Yard ($)</th>
+            <th style="width: 12%;">Default</th>
+          </tr>
+        </thead>
+        <tbody id="materials-body"></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2 style="margin: 0 0 10px 0; font-size: 1.05rem;">BarkBoys Delivery Tables</h2>
+      <p class="hint" style="margin-bottom: 10px;">These are the exact table prices the estimator uses for each material and yard amount.</p>
+      <div class="table-wrap">
+        <table>
+          <thead id="material-table-head"></thead>
+          <tbody id="material-table-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 style="margin: 0 0 10px 0; font-size: 1.05rem;">Labor Model By Job Type</h2>
+      <p class="hint" style="margin-bottom: 10px;">These values drive labor hour estimates before terrain/photo complexity factors are applied.</p>
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 16%;">Job Type</th>
+            <th style="width: 18%;">Label</th>
+            <th style="width: 12%;">Base Hours</th>
+            <th style="width: 14%;">Hours / 1000 sqft</th>
+            <th style="width: 12%;">Area Share</th>
+            <th style="width: 12%;">Labor Rate</th>
+            <th style="width: 12%;">Base Fee</th>
+          </tr>
+        </thead>
+        <tbody id="job-types-body"></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2 style="margin: 0 0 10px 0; font-size: 1.05rem;">Labor Fee Defaults</h2>
+      <div id="labor-defaults-grid" class="grid"></div>
+    </div>
+
+    <div class="card">
+      <h2 style="margin: 0 0 10px 0; font-size: 1.05rem;">Measurement Quote Defaults</h2>
+      <p class="hint" style="margin-bottom: 10px;">These settings control the new handwritten-note and iPhone Measurement quote flow.</p>
+      <div id="measurement-defaults-grid" class="grid"></div>
+    </div>
+  </div>
+
+  <script>
+    const state = {
+      materials: [],
+      materialPricingTables: {},
+      jobTypes: [],
+      laborDefaults: {},
+      measurementDefaults: {}
+    };
+
+    const laborDefaultLabels = {
+      blower_placement_rate_per_yard: "Blower Placement Rate / Yard ($)",
+      blowing_service_fee: "Blowing Service Fee ($)",
+      obstacle_fee_per_obstacle: "Obstacle Fee / Obstacle ($)",
+      gate_access_fee: "Gate Access Fee ($)",
+      haul_away_base_fee: "Haul Away Base Fee ($)"
+    };
+
+    const measurementDefaultLabels = {
+      material_depth_inches: "Default Material Depth (in)",
+      minimum_material_yards: "Minimum Material (cu yd)",
+      quote_price_rounding_dollars: "Quote Price Rounding ($)",
+      bulk_discount_threshold_1_yards: "Bulk Tier 1 Start (yd)",
+      bulk_discount_percent_1: "Bulk Tier 1 Discount (%)",
+      bulk_discount_threshold_2_yards: "Bulk Tier 2 Start (yd)",
+      bulk_discount_percent_2: "Bulk Tier 2 Discount (%)",
+      bulk_discount_threshold_3_yards: "Bulk Tier 3 Start (yd)",
+      bulk_discount_percent_3: "Bulk Tier 3 Discount (%)",
+      load_split_strategy: "Large Job Load Split"
+    };
+
+    const loadSplitStrategyOptions = [
+      { value: "max_loads_first", label: "Pack Max Loads First" },
+      { value: "balanced_loads", label: "Balance Loads More Evenly" }
+    ];
+
+    function setStatus(text, mode = "") {
+      const el = document.getElementById("status");
+      el.textContent = text;
+      el.className = `status ${mode}`.trim();
+    }
+
+    function moneyNumber(value) {
+      const n = Number(value);
+      return Number.isFinite(n) ? n : 0;
+    }
+
+    function percentNumber(value) {
+      const n = Number(value);
+      if (!Number.isFinite(n)) return 0;
+      return Math.max(0, Math.min(1, n));
+    }
+
+    function renderMaterials() {
+      const body = document.getElementById("materials-body");
+      body.innerHTML = "";
+      state.materials.forEach((row, idx) => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td><input data-idx="${idx}" data-key="material_type" data-model="materials" type="text" value="${row.material_type || ""}" readonly /></td>
+          <td><input data-idx="${idx}" data-key="label" data-model="materials" type="text" value="${row.label || ""}" /></td>
+          <td><input data-idx="${idx}" data-key="cost_per_yard" data-model="materials" type="number" min="0" step="0.01" value="${moneyNumber(row.cost_per_yard)}" /></td>
+          <td><input data-idx="${idx}" data-key="delivery_fee_per_yard" data-model="materials" type="number" min="0" step="0.01" value="${moneyNumber(row.delivery_fee_per_yard)}" /></td>
+          <td><input data-idx="${idx}" data-key="default_selected" data-model="materials" type="radio" name="default_material" ${row.default_selected ? "checked" : ""} /></td>
+        `;
+        body.appendChild(tr);
+      });
+    }
+
+    function sortedYardKeys() {
+      const keys = new Set();
+      Object.values(state.materialPricingTables || {}).forEach((table) => {
+        Object.keys(table || {}).forEach((yardKey) => keys.add(String(yardKey)));
+      });
+      return Array.from(keys).sort((a, b) => Number(a) - Number(b));
+    }
+
+    function renderMaterialPricingTables() {
+      const head = document.getElementById("material-table-head");
+      const body = document.getElementById("material-table-body");
+      const yardKeys = sortedYardKeys();
+      head.innerHTML = `
+        <tr>
+          <th style="min-width: 180px;">Material</th>
+          ${yardKeys.map((yardKey) => `<th style="min-width: 92px;">${yardKey} yd</th>`).join("")}
+        </tr>
+      `;
+      body.innerHTML = "";
+      state.materials.forEach((row) => {
+        const materialType = row.material_type || "";
+        const label = row.label || materialType;
+        const table = state.materialPricingTables[materialType] || {};
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td><strong>${label}</strong><div class="hint">${materialType}</div></td>
+          ${yardKeys.map((yardKey) => `
+            <td>
+              <input
+                data-model="materialPricingTables"
+                data-key="price"
+                data-material-type="${materialType}"
+                data-yard-key="${yardKey}"
+                type="number"
+                min="0"
+                step="0.01"
+                value="${moneyNumber(table[yardKey])}"
+              />
+            </td>
+          `).join("")}
+        `;
+        body.appendChild(tr);
+      });
+    }
+
+    function renderJobTypes() {
+      const body = document.getElementById("job-types-body");
+      body.innerHTML = "";
+      state.jobTypes.forEach((row, idx) => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td><input data-idx="${idx}" data-key="job_type" data-model="jobTypes" type="text" value="${row.job_type || ""}" readonly /></td>
+          <td><input data-idx="${idx}" data-key="label" data-model="jobTypes" type="text" value="${row.label || ""}" readonly /></td>
+          <td><input data-idx="${idx}" data-key="base_hours" data-model="jobTypes" type="number" min="0" step="0.1" value="${moneyNumber(row.base_hours)}" /></td>
+          <td><input data-idx="${idx}" data-key="hours_per_1000_sqft" data-model="jobTypes" type="number" min="0" step="0.01" value="${moneyNumber(row.hours_per_1000_sqft)}" /></td>
+          <td><input data-idx="${idx}" data-key="area_share" data-model="jobTypes" type="number" min="0" max="1" step="0.01" value="${percentNumber(row.area_share)}" /></td>
+          <td><input data-idx="${idx}" data-key="labor_rate" data-model="jobTypes" type="number" min="0" step="0.01" value="${moneyNumber(row.labor_rate)}" /></td>
+          <td><input data-idx="${idx}" data-key="base_fee" data-model="jobTypes" type="number" min="0" step="0.01" value="${moneyNumber(row.base_fee)}" /></td>
+        `;
+        body.appendChild(tr);
+      });
+    }
+
+    function renderLaborDefaults() {
+      const wrap = document.getElementById("labor-defaults-grid");
+      wrap.innerHTML = "";
+      Object.keys(laborDefaultLabels).forEach((key) => {
+        const field = document.createElement("div");
+        field.className = "field";
+        field.innerHTML = `
+          <label for="labor-default-${key}">${laborDefaultLabels[key]}</label>
+          <input id="labor-default-${key}" data-model="laborDefaults" data-key="${key}" type="number" min="0" step="0.01" value="${moneyNumber(state.laborDefaults[key])}" />
+        `;
+        wrap.appendChild(field);
+      });
+    }
+
+    function renderMeasurementDefaults() {
+      const wrap = document.getElementById("measurement-defaults-grid");
+      wrap.innerHTML = "";
+      Object.keys(measurementDefaultLabels).forEach((key) => {
+        const field = document.createElement("div");
+        field.className = "field";
+        if (key === "load_split_strategy") {
+          field.innerHTML = `
+            <label for="measurement-default-${key}">${measurementDefaultLabels[key]}</label>
+            <select id="measurement-default-${key}" data-model="measurementDefaults" data-key="${key}">
+              ${loadSplitStrategyOptions.map((option) => `
+                <option value="${option.value}" ${String(state.measurementDefaults[key] || "max_loads_first") === option.value ? "selected" : ""}>
+                  ${option.label}
+                </option>
+              `).join("")}
+            </select>
+          `;
+        } else {
+          field.innerHTML = `
+            <label for="measurement-default-${key}">${measurementDefaultLabels[key]}</label>
+            <input id="measurement-default-${key}" data-model="measurementDefaults" data-key="${key}" type="number" min="0" step="0.01" value="${moneyNumber(state.measurementDefaults[key])}" />
+          `;
+        }
+        wrap.appendChild(field);
+      });
+    }
+
+    function bindFieldEvents() {
+      document.querySelectorAll("[data-model]").forEach((input) => {
+        input.addEventListener("change", onFieldChange);
+        if (input.tagName === "INPUT") {
+          input.addEventListener("input", onFieldChange);
+        }
+      });
+    }
+
+    function onFieldChange(event) {
+      const model = event.target.getAttribute("data-model");
+      const key = event.target.getAttribute("data-key");
+      const idx = Number(event.target.getAttribute("data-idx"));
+      if (!model || !key) return;
+
+      if (model === "materials") {
+        if (!Number.isFinite(idx) || !state.materials[idx]) return;
+        if (key === "default_selected") {
+          state.materials = state.materials.map((row, rowIdx) => ({
+            ...row,
+            default_selected: rowIdx === idx
+          }));
+          renderMaterials();
+          bindFieldEvents();
+          return;
+        }
+        if (key === "cost_per_yard" || key === "delivery_fee_per_yard") {
+          state.materials[idx][key] = moneyNumber(event.target.value);
+          return;
+        }
+        state.materials[idx][key] = event.target.value;
+        return;
+      }
+
+      if (model === "materialPricingTables") {
+        const materialType = event.target.getAttribute("data-material-type");
+        const yardKey = event.target.getAttribute("data-yard-key");
+        if (!materialType || !yardKey) return;
+        if (!state.materialPricingTables[materialType]) {
+          state.materialPricingTables[materialType] = {};
+        }
+        state.materialPricingTables[materialType][yardKey] = moneyNumber(event.target.value);
+        return;
+      }
+
+      if (model === "jobTypes") {
+        if (!Number.isFinite(idx) || !state.jobTypes[idx]) return;
+        if (key === "area_share") {
+          state.jobTypes[idx][key] = percentNumber(event.target.value);
+          return;
+        }
+        if (["base_hours", "hours_per_1000_sqft", "labor_rate", "base_fee"].includes(key)) {
+          state.jobTypes[idx][key] = moneyNumber(event.target.value);
+          return;
+        }
+        state.jobTypes[idx][key] = event.target.value;
+        return;
+      }
+
+      if (model === "laborDefaults") {
+        state.laborDefaults[key] = moneyNumber(event.target.value);
+        return;
+      }
+
+      if (model === "measurementDefaults") {
+        if (key === "load_split_strategy") {
+          state.measurementDefaults[key] = event.target.value || "max_loads_first";
+          return;
+        }
+        state.measurementDefaults[key] = moneyNumber(event.target.value);
+      }
+    }
+
+    async function loadMaterials() {
+      const res = await fetch("/admin/material-costs");
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.detail || "Could not load material pricing");
+      }
+      state.materials = Array.isArray(data.materials) ? data.materials : [];
+      state.materialPricingTables = (data.material_pricing_tables && typeof data.material_pricing_tables === "object")
+        ? data.material_pricing_tables
+        : {};
+    }
+
+    async function loadLaborAssumptions() {
+      const res = await fetch("/admin/labor-assumptions");
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.detail || "Could not load labor assumptions");
+      }
+      state.jobTypes = Array.isArray(data.job_types) ? data.job_types : [];
+      state.laborDefaults = (data.labor_defaults && typeof data.labor_defaults === "object") ? data.labor_defaults : {};
+    }
+
+    async function loadMeasurementSettings() {
+      const res = await fetch("/admin/measurement-settings");
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.detail || "Could not load measurement settings");
+      }
+      state.measurementDefaults = (data.measurement_defaults && typeof data.measurement_defaults === "object")
+        ? data.measurement_defaults
+        : {};
+    }
+
+    async function saveMaterials() {
+      const res = await fetch("/admin/material-costs", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          materials: state.materials,
+          material_pricing_tables: state.materialPricingTables
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.detail || "Material save failed");
+      }
+      state.materials = Array.isArray(data.materials) ? data.materials : state.materials;
+      state.materialPricingTables = (data.material_pricing_tables && typeof data.material_pricing_tables === "object")
+        ? data.material_pricing_tables
+        : state.materialPricingTables;
+    }
+
+    async function saveLaborAssumptions() {
+      const res = await fetch("/admin/labor-assumptions", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          job_types: state.jobTypes,
+          labor_defaults: state.laborDefaults
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.detail || "Labor assumptions save failed");
+      }
+      state.jobTypes = Array.isArray(data.job_types) ? data.job_types : state.jobTypes;
+      state.laborDefaults = (data.labor_defaults && typeof data.labor_defaults === "object")
+        ? data.labor_defaults
+        : state.laborDefaults;
+    }
+
+    async function saveMeasurementSettings() {
+      const res = await fetch("/admin/measurement-settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          measurement_defaults: state.measurementDefaults
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.detail || "Measurement settings save failed");
+      }
+      state.measurementDefaults = (data.measurement_defaults && typeof data.measurement_defaults === "object")
+        ? data.measurement_defaults
+        : state.measurementDefaults;
+    }
+
+    async function loadAll() {
+      setStatus("Loading admin pricing...");
+      await Promise.all([loadMaterials(), loadLaborAssumptions(), loadMeasurementSettings()]);
+      renderMaterials();
+      renderMaterialPricingTables();
+      renderJobTypes();
+      renderLaborDefaults();
+      renderMeasurementDefaults();
+      bindFieldEvents();
+      setStatus("Pricing loaded. Edit values and click Save All Changes.", "ok");
+    }
+
+    async function saveAll() {
+      setStatus("Saving pricing and labor assumptions...");
+      await saveMaterials();
+      await saveLaborAssumptions();
+      await saveMeasurementSettings();
+      renderMaterials();
+      renderMaterialPricingTables();
+      renderJobTypes();
+      renderLaborDefaults();
+      renderMeasurementDefaults();
+      bindFieldEvents();
+      setStatus("Saved. New estimates and measurement-based quotes will use the updated assumptions.", "ok");
+    }
+
+    document.getElementById("save-btn").addEventListener("click", async () => {
+      try {
+        await saveAll();
+      } catch (error) {
+        setStatus(error.message || "Save failed.", "error");
+      }
+    });
+
+    (async () => {
+      try {
+        await loadAll();
+      } catch (error) {
+        setStatus(error.message || "Could not load admin pricing.", "error");
+      }
+    })();
+  </script>
+</body>
+</html>

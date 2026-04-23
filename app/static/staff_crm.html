@@ -1,0 +1,588 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>BarkBoys Sales Pipeline</title>
+  <style>
+    :root {
+      --bg: #f5f8f6;
+      --card: #ffffff;
+      --ink: #14241b;
+      --muted: #56645d;
+      --line: #d8e1dc;
+      --brand: #1d6a3a;
+      --brand-dark: #15522d;
+      --danger: #b42318;
+      --warning: #b54708;
+      --blue: #2f6fbb;
+      --gold: #8a6e1e;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Avenir Next", "Segoe UI", sans-serif;
+      color: var(--ink);
+      background: radial-gradient(circle at 10% 0%, #eef6ef 0, var(--bg) 45%, #edf3f1 100%);
+      padding: 24px;
+    }
+
+    .wrap { max-width: 1360px; margin: 0 auto; display: grid; gap: 16px; }
+    .page-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+    }
+    .page-copy { display: grid; gap: 8px; }
+    h1 { margin: 0; font-size: 2rem; }
+    h2 { margin: 0; font-size: 1.05rem; }
+    h3 { margin: 0; font-size: 0.98rem; }
+    p { margin: 0; color: var(--muted); }
+    .pill {
+      display: inline-flex;
+      width: fit-content;
+      padding: 6px 11px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: #fbfdfc;
+      color: var(--muted);
+      font-size: 0.82rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 18px;
+      box-shadow: 0 8px 20px rgba(20, 36, 27, 0.04);
+    }
+    .card-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    button, a.button, input, select, textarea {
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      padding: 10px 12px;
+      font-size: 0.94rem;
+      font-family: inherit;
+      text-decoration: none;
+      color: var(--ink);
+      background: #fff;
+    }
+    textarea { min-height: 72px; resize: vertical; }
+    button, a.button { cursor: pointer; font-weight: 700; }
+    button.primary, a.button.primary {
+      background: var(--brand);
+      border-color: var(--brand);
+      color: #fff;
+    }
+    button.primary:hover, a.button.primary:hover { background: var(--brand-dark); }
+    .filters {
+      display: grid;
+      grid-template-columns: minmax(220px, 1.2fr) minmax(140px, 180px) minmax(140px, 180px) auto;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .status { min-height: 20px; font-size: 0.92rem; color: var(--muted); }
+    .ok { color: var(--brand); }
+    .error { color: var(--danger); }
+    .warn { color: var(--warning); }
+    .hint { font-size: 0.85rem; color: var(--muted); }
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .summary-card {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 14px;
+      background: #fbfdfc;
+      display: grid;
+      gap: 6px;
+    }
+    .summary-card strong {
+      font-size: 1.6rem;
+      line-height: 1;
+    }
+    .pipeline-grid {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(210px, 1fr));
+      gap: 10px;
+      align-items: start;
+      overflow-x: auto;
+      padding-bottom: 4px;
+    }
+    .pipeline-col {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: #fbfdfc;
+      padding: 12px;
+      display: grid;
+      gap: 10px;
+      min-height: 220px;
+    }
+    .pipeline-list, .queue, .activity-list { display: grid; gap: 10px; }
+    .mini-card, .queue-row, .activity-row {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #fff;
+      padding: 12px;
+      display: grid;
+      gap: 8px;
+    }
+    .queue-row {
+      grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.9fr);
+      gap: 14px;
+    }
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .meta span, .bucket {
+      display: inline-flex;
+      align-items: center;
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--muted);
+      font-size: 0.82rem;
+    }
+    .status-chip {
+      color: #fff;
+      border-color: transparent;
+      text-transform: capitalize;
+      font-weight: 700;
+    }
+    .status-chip.new { background: var(--blue); }
+    .status-chip.measured { background: #4f7f3f; }
+    .status-chip.quoted { background: var(--brand); }
+    .status-chip.follow_up { background: var(--gold); }
+    .status-chip.won { background: var(--brand); }
+    .status-chip.lost { background: #8a2432; }
+    .bucket.overdue { color: #fff; background: #8a2432; border-color: transparent; }
+    .bucket.today { color: #fff; background: var(--gold); border-color: transparent; }
+    .bucket.upcoming { color: #fff; background: var(--blue); border-color: transparent; }
+    .field-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .field {
+      display: grid;
+      gap: 6px;
+    }
+    .field label {
+      font-size: 0.82rem;
+      color: var(--muted);
+      font-weight: 700;
+    }
+
+    @media (max-width: 1180px) {
+      .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .queue-row { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 880px) {
+      .page-head { flex-direction: column; align-items: stretch; }
+      .filters, .field-grid { grid-template-columns: 1fr; }
+      .summary-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="page-head">
+      <div class="page-copy">
+        <span class="pill">Internal BarkBoys Use Only</span>
+        <h1>Sales Pipeline Dashboard</h1>
+        <p>Track measured jobs, open quotes, follow-up work, and wins/losses in one place. Open any record back in the estimator with one click.</p>
+      </div>
+      <div class="actions">
+        <a class="button primary" href="/crm/workspace">Communication CRM</a>
+        <a class="button" href="/staff-estimator">Sales Worksheet</a>
+        <a class="button" href="/admin-pricing">Admin Pricing</a>
+        <a class="button" href="/staff-customer-uploads">Customer Uploads</a>
+      </div>
+    </div>
+
+    <section class="card">
+      <div class="card-head">
+        <strong>Pipeline Summary</strong>
+        <span class="hint">This dashboard refreshes from saved quotes and linked lead records.</span>
+      </div>
+      <div id="summary-grid" class="summary-grid"></div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <strong>Pipeline Board</strong>
+      </div>
+      <div id="pipeline-grid" class="pipeline-grid"></div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <strong>Work Queue</strong>
+      </div>
+      <div class="filters">
+        <input id="search" placeholder="Search customer, phone, email, address, or quote #" />
+        <select id="status-filter">
+          <option value="">All statuses</option>
+          <option value="new">New</option>
+          <option value="measured">Measured</option>
+          <option value="quoted">Quoted</option>
+          <option value="follow_up">Follow-Up</option>
+          <option value="won">Won</option>
+          <option value="lost">Lost</option>
+        </select>
+        <select id="bucket-filter">
+          <option value="">All follow-up buckets</option>
+          <option value="overdue">Overdue</option>
+          <option value="today">Today</option>
+          <option value="upcoming">Upcoming</option>
+          <option value="scheduled">Scheduled</option>
+          <option value="none">No follow-up set</option>
+        </select>
+        <button id="refresh" type="button">Refresh</button>
+      </div>
+      <p class="hint">Use the queue for daily work. Update rep, follow-up, or status here without reopening the quote.</p>
+      <div id="status" class="status">Loading sales pipeline...</div>
+      <div id="queue" class="queue"></div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <strong>Recent Activity</strong>
+      </div>
+      <div id="activity-list" class="activity-list"></div>
+    </section>
+  </div>
+
+  <script>
+    const DASHBOARD_STATUS_ORDER = ["new", "measured", "quoted", "follow_up", "won", "lost"];
+    const DASHBOARD_STATUS_LABELS = {
+      new: "New",
+      measured: "Measured",
+      quoted: "Quoted",
+      follow_up: "Follow-Up",
+      won: "Won",
+      lost: "Lost"
+    };
+
+    const summaryGridEl = document.getElementById("summary-grid");
+    const pipelineGridEl = document.getElementById("pipeline-grid");
+    const queueEl = document.getElementById("queue");
+    const activityListEl = document.getElementById("activity-list");
+    const statusEl = document.getElementById("status");
+    const searchEl = document.getElementById("search");
+    const statusFilterEl = document.getElementById("status-filter");
+    const bucketFilterEl = document.getElementById("bucket-filter");
+
+    let dashboardData = null;
+
+    function setStatus(message, className = "") {
+      statusEl.textContent = message || "";
+      statusEl.className = className ? `status ${className}` : "status";
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
+    }
+
+    function money(value) {
+      const amount = Number(value || 0);
+      return Number.isFinite(amount) ? `$${amount.toFixed(2)}` : "$0.00";
+    }
+
+    function formatDate(value) {
+      if (!value) return "Not set";
+      const dt = new Date(value);
+      return Number.isNaN(dt.getTime()) ? String(value) : dt.toLocaleDateString();
+    }
+
+    function formatDateTime(value) {
+      if (!value) return "Unknown";
+      const dt = new Date(value);
+      return Number.isNaN(dt.getTime()) ? String(value) : dt.toLocaleString();
+    }
+
+    function prettyStatus(value) {
+      return DASHBOARD_STATUS_LABELS[String(value || "").toLowerCase()] || "Quoted";
+    }
+
+    function prettyActivity(value) {
+      const raw = String(value || "quote_saved").replaceAll("_", " ");
+      return raw.charAt(0).toUpperCase() + raw.slice(1);
+    }
+
+    function dashboardPath() {
+      const params = new URLSearchParams();
+      const search = searchEl.value.trim();
+      if (search) params.set("search", search);
+      return `/crm/dashboard${params.toString() ? `?${params.toString()}` : ""}`;
+    }
+
+    function filteredQueue() {
+      const queue = Array.isArray(dashboardData?.queue) ? dashboardData.queue : [];
+      const statusFilter = statusFilterEl.value.trim();
+      const bucketFilter = bucketFilterEl.value.trim();
+      return queue.filter((item) => {
+        const matchesStatus = !statusFilter || String(item.status || "").toLowerCase() === statusFilter;
+        const matchesBucket = !bucketFilter || String(item.follow_up_bucket || "").toLowerCase() === bucketFilter;
+        return matchesStatus && matchesBucket;
+      });
+    }
+
+    function summaryCardMarkup(label, value, note = "") {
+      return `
+        <div class="summary-card">
+          <span class="hint">${escapeHtml(label)}</span>
+          <strong>${escapeHtml(String(value))}</strong>
+          <span class="hint">${escapeHtml(note)}</span>
+        </div>
+      `;
+    }
+
+    function renderSummary(summary = {}) {
+      summaryGridEl.innerHTML = [
+        summaryCardMarkup("Open Pipeline", summary.total_open || 0, "All active jobs not marked won/lost"),
+        summaryCardMarkup("Follow-Ups Today", summary.today_followups || 0, "Needs attention today"),
+        summaryCardMarkup("Overdue Follow-Ups", summary.overdue_followups || 0, "Past-due callbacks or visits"),
+        summaryCardMarkup("Upcoming Follow-Ups", summary.upcoming_followups || 0, "Next 48 hours"),
+        summaryCardMarkup("New", summary.new || 0, "Fresh jobs entering the system"),
+        summaryCardMarkup("Measured", summary.measured || 0, "Measurements gathered, pricing pending"),
+        summaryCardMarkup("Quoted", summary.quoted || 0, "Quote sent, waiting on customer"),
+        summaryCardMarkup("Won / Lost", `${summary.won || 0} / ${summary.lost || 0}`, "Closed opportunities")
+      ].join("");
+    }
+
+    function pipelineMiniCard(item) {
+      const followUpBucket = item.follow_up_bucket && item.follow_up_bucket !== "none"
+        ? `<span class="bucket ${escapeHtml(item.follow_up_bucket)}">${escapeHtml(item.follow_up_bucket.replace("_", " "))}</span>`
+        : "";
+      return `
+        <div class="mini-card">
+          <div>
+            <strong>${escapeHtml(item.customer_name || "Unknown customer")}</strong>
+            <div class="hint">${escapeHtml(item.address || "No address on file")}</div>
+          </div>
+          <div class="meta">
+            <span>Quote #${escapeHtml(String(item.quote_id || ""))}</span>
+            <span>${escapeHtml(money(item.total))}</span>
+            <span>${escapeHtml(item.sales_rep || "Unassigned")}</span>
+            ${followUpBucket}
+          </div>
+          <div class="actions">
+            <a class="button primary" href="${escapeHtml(item.estimator_url || "#")}">Open</a>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderPipeline(pipeline = {}) {
+      pipelineGridEl.innerHTML = DASHBOARD_STATUS_ORDER.map((status) => {
+        const items = Array.isArray(pipeline[status]) ? pipeline[status].slice(0, 6) : [];
+        return `
+          <div class="pipeline-col">
+            <div class="card-head" style="margin-bottom: 0;">
+              <h3>${escapeHtml(prettyStatus(status))}</h3>
+              <span class="pill">${items.length}</span>
+            </div>
+            <div class="pipeline-list">
+              ${items.length ? items.map(pipelineMiniCard).join("") : `<div class="hint">No records in this stage.</div>`}
+            </div>
+          </div>
+        `;
+      }).join("");
+    }
+
+    function queueRowMarkup(item) {
+      const quoteId = Number(item.quote_id || 0);
+      const leadId = Number(item.lead_id || 0);
+      const bucket = String(item.follow_up_bucket || "none");
+      const bucketMarkup = bucket !== "none"
+        ? `<span class="bucket ${escapeHtml(bucket)}">${escapeHtml(bucket.replace("_", " "))}</span>`
+        : `<span class="bucket">No follow-up</span>`;
+      return `
+        <div class="queue-row">
+          <div>
+            <div class="card-head" style="margin-bottom: 8px;">
+              <div>
+                <strong>${escapeHtml(item.customer_name || "Unknown customer")}</strong>
+                <div class="hint">${escapeHtml(item.address || "No address on file")}</div>
+              </div>
+              <span class="status-chip ${escapeHtml(String(item.status || "quoted").toLowerCase())}">${escapeHtml(prettyStatus(item.status))}</span>
+            </div>
+            <div class="meta">
+              <span>Quote #${escapeHtml(String(quoteId))}</span>
+              <span>${escapeHtml(item.phone || item.email || "No contact")}</span>
+              <span>Total ${escapeHtml(money(item.total))}</span>
+              <span>Rep: ${escapeHtml(item.sales_rep || "Unassigned")}</span>
+              <span>Last activity: ${escapeHtml(prettyActivity(item.last_activity_type))}</span>
+              <span>${escapeHtml(formatDateTime(item.last_activity_at))}</span>
+              ${bucketMarkup}
+            </div>
+            ${item.lead_notes ? `<div class="hint" style="margin-top: 8px;">Notes: ${escapeHtml(item.lead_notes)}</div>` : ""}
+          </div>
+          <div>
+            <div class="field-grid">
+              <div class="field">
+                <label for="crm-status-${quoteId}">Pipeline Status</label>
+                <select id="crm-status-${quoteId}" data-lead-id="${leadId}" data-update="status">
+                  ${DASHBOARD_STATUS_ORDER.map((status) => `<option value="${status}" ${String(item.status || "").toLowerCase() === status ? "selected" : ""}>${prettyStatus(status)}</option>`).join("")}
+                </select>
+              </div>
+              <div class="field">
+                <label for="crm-follow-up-${quoteId}">Follow-Up Date</label>
+                <input id="crm-follow-up-${quoteId}" data-lead-id="${leadId}" data-update="follow_up_date" type="date" value="${escapeHtml(item.follow_up_date || "")}" />
+              </div>
+              <div class="field">
+                <label for="crm-rep-${quoteId}">Sales Rep</label>
+                <input id="crm-rep-${quoteId}" data-lead-id="${leadId}" data-update="sales_rep" value="${escapeHtml(item.sales_rep || "")}" />
+              </div>
+              <div class="field">
+                <label>Actions</label>
+                <div class="actions">
+                  <button type="button" class="primary" data-save-lead="${leadId}">Save Update</button>
+                  <a class="button" href="${escapeHtml(item.estimator_url || `/staff-estimator?quote_id=${quoteId}`)}">Open Worksheet</a>
+                  <a class="button" href="${escapeHtml(item.pdf_url || `/quotes/${quoteId}/pdf`)}" target="_blank" rel="noopener">PDF</a>
+                </div>
+              </div>
+            </div>
+            ${leadId ? "" : `<div class="hint" style="margin-top: 8px;">Inline updates need a linked lead record. Re-save the quote from the worksheet if this row came from older demo data.</div>`}
+          </div>
+        </div>
+      `;
+    }
+
+    function renderQueue() {
+      const items = filteredQueue();
+      if (!items.length) {
+        queueEl.innerHTML = "";
+        setStatus("No pipeline records match this filter.", "warn");
+        return;
+      }
+      queueEl.innerHTML = items.map(queueRowMarkup).join("");
+      bindQueueActions();
+      setStatus(`Showing ${items.length} pipeline record(s).`, "ok");
+    }
+
+    function renderActivity(items = []) {
+      activityListEl.innerHTML = items.length ? items.map((item) => `
+        <div class="activity-row">
+          <strong>${escapeHtml(item.customer_name || "Unknown customer")}</strong>
+          <div class="meta">
+            <span class="status-chip ${escapeHtml(String(item.status || "quoted").toLowerCase())}">${escapeHtml(prettyStatus(item.status))}</span>
+            <span>${escapeHtml(prettyActivity(item.activity_type))}</span>
+            <span>${escapeHtml(formatDateTime(item.activity_at))}</span>
+            <span>Quote #${escapeHtml(String(item.quote_id || ""))}</span>
+          </div>
+          <div class="actions">
+            <a class="button primary" href="${escapeHtml(item.estimator_url || `/staff-estimator?quote_id=${item.quote_id}`)}">Open</a>
+          </div>
+        </div>
+      `).join("") : `<div class="hint">No recent activity yet.</div>`;
+    }
+
+    async function updateLead(leadId, payload) {
+      if (!leadId) {
+        throw new Error("This quote does not have a linked lead record yet.");
+      }
+      const response = await fetch(`/leads/${leadId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify(payload)
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.detail || "Could not update pipeline record.");
+      }
+      return data;
+    }
+
+    function bindQueueActions() {
+      document.querySelectorAll("[data-save-lead]").forEach((button) => {
+        button.addEventListener("click", async () => {
+          const leadId = Number(button.getAttribute("data-save-lead") || 0);
+          const row = button.closest(".queue-row");
+          const statusInput = row?.querySelector('[data-update="status"]');
+          const followUpInput = row?.querySelector('[data-update="follow_up_date"]');
+          const salesRepInput = row?.querySelector('[data-update="sales_rep"]');
+          try {
+            button.disabled = true;
+            await updateLead(leadId, {
+              status: statusInput?.value || "quoted",
+              follow_up_date: followUpInput?.value || null,
+              sales_rep: salesRepInput?.value || null
+            });
+            setStatus(`Pipeline record updated for lead #${leadId}.`, "ok");
+            await refreshDashboard();
+          } catch (error) {
+            setStatus(error.message || "Could not update pipeline record.", "error");
+          } finally {
+            button.disabled = false;
+          }
+        });
+      });
+    }
+
+    async function refreshDashboard() {
+      setStatus("Loading sales pipeline...");
+      try {
+        const response = await fetch(dashboardPath(), { credentials: "same-origin" });
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.detail || "Could not load sales pipeline.");
+        }
+        dashboardData = data;
+        renderSummary(data.summary || {});
+        renderPipeline(data.pipeline || {});
+        renderQueue();
+        renderActivity(Array.isArray(data.recent_activity) ? data.recent_activity : []);
+      } catch (error) {
+        queueEl.innerHTML = "";
+        pipelineGridEl.innerHTML = "";
+        activityListEl.innerHTML = "";
+        summaryGridEl.innerHTML = "";
+        setStatus(error.message || "Could not load sales pipeline.", "error");
+      }
+    }
+
+    function debounce(fn, wait) {
+      let timeoutId = 0;
+      return (...args) => {
+        window.clearTimeout(timeoutId);
+        timeoutId = window.setTimeout(() => fn(...args), wait);
+      };
+    }
+
+    document.getElementById("refresh").addEventListener("click", refreshDashboard);
+    searchEl.addEventListener("input", debounce(refreshDashboard, 220));
+    statusFilterEl.addEventListener("change", renderQueue);
+    bucketFilterEl.addEventListener("change", renderQueue);
+
+    refreshDashboard();
+  </script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+.env
+.env.save
+.venv/
+.python-runtime/
+__pycache__/
+app/__pycache__/
+modules/**/__pycache__/
+node_modules/
+uploads/
+*.db
+*.zip
+.DS_Store

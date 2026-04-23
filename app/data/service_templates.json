@@ -1,0 +1,10 @@
+[
+  {
+    "name": "Material Delivery (Blower)",
+    "unit": "delivery",
+    "base_price": 95,
+    "per_unit_price": 0,
+    "min_charge": 95,
+    "default_quantity": 1
+  }
+]
