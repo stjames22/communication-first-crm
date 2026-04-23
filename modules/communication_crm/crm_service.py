@@ -1,0 +1,507 @@
+from __future__ import annotations
+
+import json
+from datetime import datetime, timedelta
+from decimal import Decimal
+from typing import Any, Optional
+
+from sqlalchemy import desc, func
+from sqlalchemy.orm import Session, selectinload
+
+from .models import (
+    CrmActivity,
+    CrmCall,
+    CrmContact,
+    CrmConversation,
+    CrmExternalLink,
+    CrmMessage,
+    CrmQuote,
+    CrmQuoteLineItem,
+    CrmQuoteVersion,
+    CrmServiceSite,
+    CrmTask,
+)
+
+
+def money(value: Any) -> float:
+    if value is None:
+        return 0.0
+    if isinstance(value, Decimal):
+        return float(value)
+    return float(value)
+
+
+def row_id(value: Any) -> Optional[str]:
+    return str(value) if value is not None else None
+
+
+def create_activity(
+    db: Session,
+    *,
+    contact_id: str,
+    related_type: str,
+    activity_type: str,
+    title: str,
+    body: Optional[str] = None,
+    related_id: Optional[str] = None,
+    actor_user: Optional[str] = None,
+    metadata: Optional[dict[str, Any]] = None,
+) -> CrmActivity:
+    activity = CrmActivity(
+        contact_id=contact_id,
+        related_type=related_type,
+        related_id=related_id,
+        activity_type=activity_type,
+        title=title,
+        body=body,
+        actor_user=actor_user,
+        metadata_json=json.dumps(metadata or {}),
+    )
+    db.add(activity)
+    db.flush()
+    return activity
+
+
+def serialize_contact(contact: CrmContact) -> dict[str, Any]:
+    primary_site = contact.sites[0] if contact.sites else None
+    latest_quote = contact.quotes[0] if contact.quotes else None
+    return {
+        "id": contact.id,
+        "display_name": contact.display_name,
+        "mobile_phone": contact.mobile_phone,
+        "email": contact.email,
+        "status": contact.status,
+        "source": contact.source,
+        "assigned_user": contact.assigned_user,
+        "primary_site": serialize_site(primary_site) if primary_site else None,
+        "latest_quote": serialize_quote_summary(latest_quote) if latest_quote else None,
+        "created_at": contact.created_at.isoformat() if contact.created_at else None,
+        "updated_at": contact.updated_at.isoformat() if contact.updated_at else None,
+    }
+
+
+def serialize_site(site: CrmServiceSite) -> dict[str, Any]:
+    return {
+        "id": site.id,
+        "label": site.label,
+        "address_line_1": site.address_line_1,
+        "city": site.city,
+        "state": site.state,
+        "zip": site.zip,
+        "delivery_zone": site.delivery_zone,
+        "site_notes": site.site_notes,
+    }
+
+
+def serialize_quote_summary(quote: CrmQuote) -> dict[str, Any]:
+    return {
+        "id": quote.id,
+        "quote_number": quote.quote_number,
+        "title": quote.title,
+        "status": quote.status,
+        "grand_total": money(quote.grand_total),
+        "updated_at": quote.updated_at.isoformat() if quote.updated_at else None,
+    }
+
+
+def serialize_activity(activity: CrmActivity) -> dict[str, Any]:
+    return {
+        "id": activity.id,
+        "contact_id": activity.contact_id,
+        "related_type": activity.related_type,
+        "related_id": activity.related_id,
+        "activity_type": activity.activity_type,
+        "title": activity.title,
+        "body": activity.body,
+        "actor_user": activity.actor_user,
+        "metadata": safe_json(activity.metadata_json),
+        "created_at": activity.created_at.isoformat() if activity.created_at else None,
+    }
+
+
+def safe_json(value: Optional[str]) -> dict[str, Any]:
+    if not value:
+        return {}
+    try:
+        parsed = json.loads(value)
+    except json.JSONDecodeError:
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def list_contacts(db: Session) -> list[dict[str, Any]]:
+    contacts = (
+        db.query(CrmContact)
+        .options(selectinload(CrmContact.sites), selectinload(CrmContact.quotes))
+        .order_by(desc(CrmContact.updated_at))
+        .limit(200)
+        .all()
+    )
+    return [serialize_contact(contact) for contact in contacts]
+
+
+def get_contact_detail(db: Session, contact_id: str) -> Optional[dict[str, Any]]:
+    contact = (
+        db.query(CrmContact)
+        .options(
+            selectinload(CrmContact.sites),
+            selectinload(CrmContact.conversations),
+            selectinload(CrmContact.quotes),
+            selectinload(CrmContact.tasks),
+        )
+        .filter(CrmContact.id == contact_id)
+        .first()
+    )
+    if not contact:
+        return None
+    return {
+        "contact": serialize_contact(contact),
+        "sites": [serialize_site(site) for site in contact.sites],
+        "conversations": [serialize_conversation_summary(conversation) for conversation in contact.conversations],
+        "quotes": [serialize_quote_summary(quote) for quote in contact.quotes],
+        "tasks": [serialize_task(task) for task in contact.tasks],
+        "timeline": list_timeline(db, contact_id),
+    }
+
+
+def serialize_conversation_summary(conversation: CrmConversation) -> dict[str, Any]:
+    return {
+        "id": conversation.id,
+        "contact_id": conversation.contact_id,
+        "channel_type": conversation.channel_type,
+        "status": conversation.status,
+        "unread_count": conversation.unread_count,
+        "last_message_at": conversation.last_message_at.isoformat() if conversation.last_message_at else None,
+    }
+
+
+def serialize_task(task: CrmTask) -> dict[str, Any]:
+    return {
+        "id": task.id,
+        "contact_id": task.contact_id,
+        "assigned_user": task.assigned_user,
+        "title": task.title,
+        "due_at": task.due_at.isoformat() if task.due_at else None,
+        "status": task.status,
+        "priority": task.priority,
+        "created_at": task.created_at.isoformat() if task.created_at else None,
+    }
+
+
+def list_timeline(db: Session, contact_id: str) -> list[dict[str, Any]]:
+    rows = (
+        db.query(CrmActivity)
+        .filter(CrmActivity.contact_id == contact_id)
+        .order_by(desc(CrmActivity.created_at))
+        .limit(100)
+        .all()
+    )
+    return [serialize_activity(row) for row in rows]
+
+
+def list_conversations(db: Session) -> list[dict[str, Any]]:
+    conversations = (
+        db.query(CrmConversation)
+        .options(selectinload(CrmConversation.contact), selectinload(CrmConversation.messages))
+        .order_by(desc(CrmConversation.last_message_at), desc(CrmConversation.created_at))
+        .limit(200)
+        .all()
+    )
+    result = []
+    for conversation in conversations:
+        messages = sorted(conversation.messages, key=lambda item: item.created_at or datetime.min)
+        last_message = messages[-1] if messages else None
+        result.append(
+            {
+                **serialize_conversation_summary(conversation),
+                "display_name": conversation.contact.display_name,
+                "mobile_phone": conversation.contact.mobile_phone,
+                "email": conversation.contact.email,
+                "last_message_body": last_message.body if last_message else None,
+                "last_message_direction": last_message.direction if last_message else None,
+            }
+        )
+    return result
+
+
+def get_conversation_detail(db: Session, conversation_id: str) -> Optional[dict[str, Any]]:
+    conversation = (
+        db.query(CrmConversation)
+        .options(
+            selectinload(CrmConversation.contact).selectinload(CrmContact.sites),
+            selectinload(CrmConversation.contact).selectinload(CrmContact.quotes),
+            selectinload(CrmConversation.messages),
+        )
+        .filter(CrmConversation.id == conversation_id)
+        .first()
+    )
+    if not conversation:
+        return None
+    conversation.unread_count = 0
+    return {
+        "conversation": serialize_conversation_summary(conversation),
+        "contact": serialize_contact(conversation.contact),
+        "messages": [
+            {
+                "id": message.id,
+                "direction": message.direction,
+                "channel": message.channel,
+                "body": message.body,
+                "delivery_status": message.delivery_status,
+                "created_at": message.created_at.isoformat() if message.created_at else None,
+            }
+            for message in sorted(conversation.messages, key=lambda item: item.created_at or datetime.min)
+        ],
+        "timeline": list_timeline(db, conversation.contact_id),
+    }
+
+
+def send_message(db: Session, conversation_id: str, body: str, actor_user: Optional[str] = None) -> Optional[dict[str, Any]]:
+    conversation = db.query(CrmConversation).filter(CrmConversation.id == conversation_id).first()
+    if not conversation:
+        return None
+    message = CrmMessage(
+        conversation_id=conversation.id,
+        contact_id=conversation.contact_id,
+        direction="outbound",
+        channel="sms",
+        body=body,
+        delivery_status="mock_sent",
+        sent_by_user=actor_user,
+    )
+    db.add(message)
+    db.flush()
+    conversation.last_message_at = message.created_at or datetime.utcnow()
+    conversation.unread_count = 0
+    create_activity(
+        db,
+        contact_id=conversation.contact_id,
+        related_type="message",
+        related_id=message.id,
+        activity_type="message.outbound",
+        title="Outbound text logged",
+        body=body,
+        actor_user=actor_user,
+        metadata={"provider": "mock"},
+    )
+    return {"id": message.id, "delivery_status": message.delivery_status}
+
+
+def dashboard(db: Session) -> dict[str, Any]:
+    unread_texts = db.query(func.coalesce(func.sum(CrmConversation.unread_count), 0)).scalar() or 0
+    missed_calls = db.query(CrmCall).filter(CrmCall.status.in_(["missed", "no-answer"])).count()
+    new_leads = db.query(CrmContact).filter(CrmContact.status.in_(["lead", "new_lead"])).count()
+    quote_followups = db.query(CrmQuote).filter(CrmQuote.status.in_(["draft", "sent"])).count()
+    tasks_due = db.query(CrmTask).filter(CrmTask.status != "completed").count()
+    activity = db.query(CrmActivity).order_by(desc(CrmActivity.created_at)).limit(10).all()
+    return {
+        "metrics": {
+            "unreadTexts": int(unread_texts),
+            "missedCalls": missed_calls,
+            "newLeads": new_leads,
+            "quotesAwaitingFollowUp": quote_followups,
+            "tasksDueToday": tasks_due,
+        },
+        "recentActivity": [serialize_activity(row) for row in activity],
+    }
+
+
+def list_quotes(db: Session) -> list[dict[str, Any]]:
+    quotes = db.query(CrmQuote).order_by(desc(CrmQuote.updated_at)).limit(200).all()
+    return [serialize_quote_summary(quote) for quote in quotes]
+
+
+def list_calls(db: Session) -> list[dict[str, Any]]:
+    calls = db.query(CrmCall).order_by(desc(CrmCall.started_at)).limit(200).all()
+    return [
+        {
+            "id": call.id,
+            "contact_id": call.contact_id,
+            "direction": call.direction,
+            "status": call.status,
+            "from_number": call.from_number,
+            "to_number": call.to_number,
+            "duration_seconds": call.duration_seconds,
+            "disposition": call.disposition,
+            "notes": call.notes,
+            "started_at": call.started_at.isoformat() if call.started_at else None,
+        }
+        for call in calls
+    ]
+
+
+def list_external_links(db: Session) -> list[dict[str, Any]]:
+    links = db.query(CrmExternalLink).order_by(desc(CrmExternalLink.created_at)).limit(200).all()
+    return [
+        {
+            "id": link.id,
+            "internal_type": link.internal_type,
+            "internal_id": link.internal_id,
+            "external_system": link.external_system,
+            "external_id": link.external_id,
+            "metadata": safe_json(link.metadata_json),
+            "created_at": link.created_at.isoformat() if link.created_at else None,
+        }
+        for link in links
+    ]
+
+
+def seed_demo(db: Session) -> dict[str, Any]:
+    if db.query(CrmContact).count():
+        return {"ok": True, "seeded": False}
+
+    kyle = CrmContact(
+        display_name="Kyle Bennett",
+        mobile_phone="+15035550141",
+        email="kyle@example.com",
+        status="lead",
+        source="website",
+        assigned_user="Sales",
+    )
+    avery = CrmContact(
+        display_name="Avery Cole",
+        mobile_phone="+15035550142",
+        email="avery@example.com",
+        status="quoted",
+        source="referral",
+        assigned_user="Sales",
+    )
+    db.add_all([kyle, avery])
+    db.flush()
+
+    kyle_site = CrmServiceSite(
+        contact_id=kyle.id,
+        label="Home",
+        address_line_1="2217 SE Alder St",
+        city="Portland",
+        state="OR",
+        zip="97214",
+        delivery_zone="Central",
+    )
+    avery_site = CrmServiceSite(
+        contact_id=avery.id,
+        label="Backyard Project",
+        address_line_1="6110 N Omaha Ave",
+        city="Portland",
+        state="OR",
+        zip="97217",
+        delivery_zone="North",
+    )
+    db.add_all([kyle_site, avery_site])
+    db.flush()
+
+    conversation = CrmConversation(
+        contact_id=kyle.id,
+        channel_type="sms",
+        status="open",
+        unread_count=1,
+        assigned_user="Sales",
+        last_message_at=datetime.utcnow(),
+    )
+    db.add(conversation)
+    db.flush()
+    db.add_all(
+        [
+            CrmMessage(
+                conversation_id=conversation.id,
+                contact_id=kyle.id,
+                direction="inbound",
+                channel="sms",
+                body="Can BarkBoys quote mulch and cleanup for my front beds?",
+                delivery_status="received",
+            ),
+            CrmCall(
+                contact_id=kyle.id,
+                conversation_id=conversation.id,
+                direction="inbound",
+                status="missed",
+                from_number=kyle.mobile_phone,
+                to_number="+15035550000",
+                duration_seconds=0,
+            ),
+        ]
+    )
+
+    quote = CrmQuote(
+        contact_id=avery.id,
+        service_site_id=avery_site.id,
+        quote_number="CRM-BB-0001",
+        title="BarkBoys backyard refresh",
+        status="sent",
+        subtotal=Decimal("1845.00"),
+        delivery_total=Decimal("95.00"),
+        tax_total=Decimal("0.00"),
+        grand_total=Decimal("1940.00"),
+        sent_at=datetime.utcnow() - timedelta(hours=2),
+    )
+    db.add(quote)
+    db.flush()
+    version = CrmQuoteVersion(
+        quote_id=quote.id,
+        version_number=1,
+        pricing_snapshot_json=json.dumps({"source": "communication_crm_seed"}),
+        subtotal=quote.subtotal,
+        delivery_total=quote.delivery_total,
+        tax_total=quote.tax_total,
+        grand_total=quote.grand_total,
+    )
+    db.add(version)
+    db.flush()
+    quote.current_version_id = version.id
+    db.add_all(
+        [
+            CrmQuoteLineItem(
+                quote_version_id=version.id,
+                item_type="service",
+                name="Mulch installation",
+                quantity=8,
+                unit="yard",
+                unit_price=145,
+                total_price=1160,
+                sort_order=1,
+                source_reference="barkboys-compatible",
+            ),
+            CrmTask(
+                contact_id=kyle.id,
+                assigned_user="Sales",
+                title="Reply with quote draft including edging option",
+                due_at=datetime.utcnow() + timedelta(hours=2),
+                priority="high",
+            ),
+            CrmExternalLink(
+                internal_type="quote",
+                internal_id=quote.id,
+                external_system="barkboys",
+                external_id="future-barkboys-quote-id",
+                metadata_json=json.dumps({"note": "Safe bridge link; no BarkBoys quote table mutation."}),
+            ),
+        ]
+    )
+
+    create_activity(
+        db,
+        contact_id=kyle.id,
+        related_type="message",
+        activity_type="message.inbound",
+        title="Inbound text received",
+        body="Can BarkBoys quote mulch and cleanup for my front beds?",
+    )
+    create_activity(
+        db,
+        contact_id=kyle.id,
+        related_type="call",
+        activity_type="call.missed",
+        title="Missed call",
+        body="Missed inbound call from Kyle Bennett.",
+    )
+    create_activity(
+        db,
+        contact_id=avery.id,
+        related_type="quote",
+        related_id=quote.id,
+        activity_type="quote.sent",
+        title="Quote sent",
+        body="CRM-BB-0001 was sent from the isolated CRM module.",
+    )
+    db.commit()
+    return {"ok": True, "seeded": True}

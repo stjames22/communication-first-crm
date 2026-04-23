@@ -1,0 +1,474 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>BarkBoys Quote Tool</title>
+  <style>
+    :root {
+      --ink:#1d2a24;
+      --muted:#55655d;
+      --line:#cad6cf;
+      --bg:#f3f7f4;
+      --card:#ffffff;
+      --brand:#1c6a3a;
+      --danger:#b42318;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 20px;
+      font-family: "Avenir Next", "Segoe UI", sans-serif;
+      background: radial-gradient(circle at 15% 0%, #e9f3ea 0, var(--bg) 45%, #edf3ef 100%);
+      color: var(--ink);
+    }
+    .wrap { max-width: 1200px; margin: 0 auto; }
+    h1 { margin: 0 0 12px; }
+    .grid { display: grid; gap: 14px; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 14px;
+      box-shadow: 0 8px 20px rgba(29,42,36,.05);
+    }
+    .row { display:grid; grid-template-columns:repeat(12,1fr); gap:8px; }
+    .field { display:flex; flex-direction:column; gap:5px; }
+    .field label { font-size: .82rem; color: var(--muted); font-weight: 700; }
+    input, select, textarea, button {
+      font: inherit;
+      border:1px solid var(--line);
+      border-radius:8px;
+      padding:9px 10px;
+      background:#fff;
+      color:var(--ink);
+    }
+    textarea { min-height: 70px; }
+    button { cursor:pointer; font-weight:700; }
+    .primary { background:var(--brand); color:#fff; border-color:var(--brand); }
+    .ghost { background:transparent; }
+    .danger { color: var(--danger); }
+
+    .items-head, .item-row {
+      display:grid;
+      grid-template-columns: .7fr .8fr 2fr .9fr .9fr .9fr .9fr .8fr auto;
+      gap: 7px;
+      align-items:center;
+      margin-bottom:7px;
+    }
+    .items-head { font-size:.78rem; color:var(--muted); font-weight:800; }
+    .amount { text-align:right; font-variant-numeric: tabular-nums; }
+    .actions { display:flex; flex-wrap:wrap; gap:8px; }
+    .status { min-height: 18px; font-size: .9rem; color: var(--muted); }
+
+    .print-sheet {
+      background:#fff;
+      border:2px solid #111;
+      padding:16px;
+      margin-top:10px;
+    }
+    .print-header {
+      display:flex; justify-content:space-between; gap:12px; border-bottom:2px solid #111; padding-bottom:10px;
+    }
+    .print-logo { font-size:1.3rem; font-weight:800; letter-spacing:.4px; }
+    .print-sub { font-size:.85rem; color:#333; }
+    .print-grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:10px; }
+    .print-box { border:1px solid #111; padding:8px; min-height:70px; }
+    .print-title { font-weight:800; margin-bottom:5px; }
+    .print-table { width:100%; border-collapse:collapse; margin-top:8px; }
+    .print-table th, .print-table td { border:1px solid #111; padding:6px; font-size:.85rem; }
+    .print-table th { background:#f2f2f2; text-align:left; }
+    .right { text-align:right; }
+    .sig-line { border-bottom:1px solid #111; min-height:22px; }
+    .muted { color: var(--muted); }
+
+    @media (max-width: 980px) {
+      .items-head { display:none; }
+      .item-row { grid-template-columns:1fr 1fr; border:1px solid var(--line); border-radius:8px; padding:8px; }
+      .amount { text-align:left; }
+    }
+
+    @media print {
+      body { background:#fff; padding:0; }
+      .no-print { display:none !important; }
+      .print-sheet { border:none; margin:0; padding:0; }
+      .wrap { max-width:none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1 class="no-print">BarkBoys Quote Template Tool</h1>
+
+    <section class="card no-print">
+      <div class="row">
+        <div class="field" style="grid-column: span 3;"><label>API Base URL</label><input id="apiBase" value="http://localhost:8000" /></div>
+        <div class="field" style="grid-column: span 3;"><label>API Key</label><input id="apiKey" placeholder="barkboys-test-key" /></div>
+        <div class="field" style="grid-column: span 2;"><label>Frequency</label>
+          <select id="frequency"><option value="one_time">One Time</option><option value="weekly">Weekly</option><option value="biweekly">Biweekly</option><option value="monthly" selected>Monthly</option></select>
+        </div>
+        <div class="field" style="grid-column: span 2;"><label>Zone %</label><input id="zone" type="number" step="0.01" value="0" /></div>
+        <div class="field" style="grid-column: span 2;"><label>Tax %</label><input id="tax" type="number" step="0.01" value="0" /></div>
+      </div>
+    </section>
+
+    <section class="card no-print">
+      <div class="row">
+        <div class="field" style="grid-column: span 3;"><label>Quote #</label><input id="quoteNo" placeholder="Auto when saved" /></div>
+        <div class="field" style="grid-column: span 3;"><label>Date</label><input id="quoteDate" type="date" /></div>
+        <div class="field" style="grid-column: span 3;"><label>Sales Rep</label><input id="salesRep" /></div>
+        <div class="field" style="grid-column: span 3;"><label>Invoice #</label><input id="invoiceNo" /></div>
+
+        <div class="field" style="grid-column: span 3;"><label>Customer Name</label><input id="customerName" /></div>
+        <div class="field" style="grid-column: span 3;"><label>Customer Phone</label><input id="customerPhone" /></div>
+        <div class="field" style="grid-column: span 3;"><label>Site Contact</label><input id="siteContact" /></div>
+        <div class="field" style="grid-column: span 3;"><label>Site Phone</label><input id="sitePhone" /></div>
+
+        <div class="field" style="grid-column: span 6;"><label>Service Address</label><input id="serviceAddress" /></div>
+        <div class="field" style="grid-column: span 3;"><label>City</label><input id="city" /></div>
+        <div class="field" style="grid-column: span 1;"><label>State</label><input id="state" value="OR" /></div>
+        <div class="field" style="grid-column: span 2;"><label>Zip</label><input id="zip" /></div>
+
+        <div class="field" style="grid-column: span 3;"><label>Service Date</label><input id="serviceDate" type="date" /></div>
+        <div class="field" style="grid-column: span 2;"><label>Start Time</label><input id="startTime" placeholder="1:00 pm" /></div>
+        <div class="field" style="grid-column: span 2;"><label>End Time</label><input id="endTime" placeholder="3:00 pm" /></div>
+        <div class="field" style="grid-column: span 2;"><label>Truck #</label><input id="truckNo" /></div>
+        <div class="field" style="grid-column: span 3;"><label>Operator / Crew</label><input id="operatorCrew" /></div>
+
+        <div class="field" style="grid-column: span 3;"><label>Dump Location</label><input id="dumpLocation" /></div>
+        <div class="field" style="grid-column: span 3;"><label>Obstacles</label><input id="obstacles" /></div>
+        <div class="field" style="grid-column: span 3;"><label>House Color</label><input id="houseColor" /></div>
+        <div class="field" style="grid-column: span 3;"><label>Loaded From (Yards)</label><input id="loadedFromYards" /></div>
+
+        <div class="field" style="grid-column: span 12;"><label>Instructions</label><textarea id="instructions"></textarea></div>
+        <div class="field" style="grid-column: span 12;"><label>Comments</label><textarea id="comments"></textarea></div>
+      </div>
+    </section>
+
+    <section class="card no-print">
+      <div class="items-head">
+        <div>Qty</div><div>Unit</div><div>Description</div><div>Item #</div><div>Unit Price</div><div>Base</div><div>Min</div><div>Amount</div><div></div>
+      </div>
+      <div id="items"></div>
+      <div class="actions">
+        <button id="addItem" type="button" class="ghost">+ Add Line</button>
+      </div>
+      <div style="margin-top:10px; max-width:360px; margin-left:auto;">
+        <div class="row"><div style="grid-column:span 7;" class="muted">Subtotal</div><div style="grid-column:span 5;" class="amount" id="subTotal">$0.00</div></div>
+        <div class="row"><div style="grid-column:span 7;" class="muted">Zone Adjustment</div><div style="grid-column:span 5;" class="amount" id="zoneAmt">$0.00</div></div>
+        <div class="row"><div style="grid-column:span 7;" class="muted">Discount</div><div style="grid-column:span 5;" class="amount" id="discountAmt">-$0.00</div></div>
+        <div class="row"><div style="grid-column:span 7;" class="muted">Tax</div><div style="grid-column:span 5;" class="amount" id="taxAmt">$0.00</div></div>
+        <hr />
+        <div class="row"><div style="grid-column:span 7; font-weight:800;">Total</div><div style="grid-column:span 5; font-weight:800;" class="amount" id="totalAmt">$0.00</div></div>
+      </div>
+    </section>
+
+    <section class="card no-print">
+      <div class="actions">
+        <button id="calcBtn" type="button">Recalculate</button>
+        <button id="saveBtn" type="button" class="primary">Save to API</button>
+        <button id="jsonBtn" type="button">Download Quote JSON</button>
+        <button id="printBtn" type="button">Print / Save PDF</button>
+      </div>
+      <div id="status" class="status"></div>
+    </section>
+
+    <section id="printSheet" class="print-sheet">
+      <div class="print-header">
+        <div>
+          <div class="print-logo">BarkBoys</div>
+          <div class="print-sub">Quote + Service Order</div>
+        </div>
+        <div class="print-sub">
+          <div><strong>Quote #:</strong> <span data-fill="quoteNo"></span></div>
+          <div><strong>Date:</strong> <span data-fill="quoteDate"></span></div>
+          <div><strong>Invoice #:</strong> <span data-fill="invoiceNo"></span></div>
+          <div><strong>Sales Rep:</strong> <span data-fill="salesRep"></span></div>
+        </div>
+      </div>
+
+      <div class="print-grid-2">
+        <div class="print-box">
+          <div class="print-title">Sold To</div>
+          <div><span data-fill="customerName"></span></div>
+          <div><span data-fill="customerPhone"></span></div>
+          <div><span data-fill="serviceAddress"></span>, <span data-fill="city"></span>, <span data-fill="state"></span> <span data-fill="zip"></span></div>
+        </div>
+        <div class="print-box">
+          <div class="print-title">Service Details</div>
+          <div><strong>Date:</strong> <span data-fill="serviceDate"></span></div>
+          <div><strong>Time:</strong> <span data-fill="startTime"></span> - <span data-fill="endTime"></span></div>
+          <div><strong>Truck:</strong> <span data-fill="truckNo"></span> | <strong>Operator/Crew:</strong> <span data-fill="operatorCrew"></span></div>
+        </div>
+      </div>
+
+      <table class="print-table" id="printItemsTable">
+        <thead>
+          <tr><th>Qty</th><th>Unit</th><th>Description</th><th>Item #</th><th class="right">Unit Price</th><th class="right">Amount</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+
+      <div style="max-width:380px; margin-left:auto; margin-top:10px;">
+        <div><strong>Subtotal:</strong> <span class="right" id="pSub"></span></div>
+        <div><strong>Zone Adjustment:</strong> <span class="right" id="pZone"></span></div>
+        <div><strong>Discount:</strong> <span class="right" id="pDisc"></span></div>
+        <div><strong>Tax:</strong> <span class="right" id="pTax"></span></div>
+        <div style="font-size:1.1rem;"><strong>Total:</strong> <span class="right" id="pTotal"></span></div>
+      </div>
+
+      <div class="print-grid-2" style="margin-top:10px;">
+        <div class="print-box">
+          <div><strong>Dump Loc:</strong> <span data-fill="dumpLocation"></span></div>
+          <div><strong>Obstacles:</strong> <span data-fill="obstacles"></span></div>
+          <div><strong>House Color:</strong> <span data-fill="houseColor"></span></div>
+          <div><strong>Loaded From (Yards):</strong> <span data-fill="loadedFromYards"></span></div>
+        </div>
+        <div class="print-box">
+          <div><strong>Instructions:</strong></div>
+          <div data-fill="instructions"></div>
+          <div style="margin-top:8px;"><strong>Comments:</strong></div>
+          <div data-fill="comments"></div>
+        </div>
+      </div>
+
+      <div style="margin-top:12px; border:1px solid #111; padding:8px;">
+        Customer acknowledges placement/service instructions and accepts site-access and obstruction constraints.
+        <div style="margin-top:10px; display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+          <div><div>Accepted By:</div><div class="sig-line"></div></div>
+          <div><div>Date:</div><div class="sig-line"></div></div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <template id="itemTpl">
+    <div class="item-row">
+      <input class="qty" type="number" step="0.01" value="1" />
+      <input class="unit" value="UNIT" />
+      <input class="desc" placeholder="Bark-O-Mulch Delivered" />
+      <input class="itemNo" placeholder="B-DLV" />
+      <input class="unitPrice" type="number" step="0.01" value="0" />
+      <input class="base" type="number" step="0.01" value="0" />
+      <input class="min" type="number" step="0.01" value="0" />
+      <div class="amount">$0.00</div>
+      <button type="button" class="ghost remove">Remove</button>
+    </div>
+  </template>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const itemsWrap = $("items");
+    const itemTpl = $("itemTpl");
+
+    const discountByFreq = { one_time: 0, weekly: 15, biweekly: 10, monthly: 0 };
+
+    function todayISO() { return new Date().toISOString().slice(0, 10); }
+    function n(v) { const x = Number(v); return Number.isFinite(x) ? x : 0; }
+    function m(v) { return `$${n(v).toFixed(2)}`; }
+    function round(v) { return Math.round((n(v) + Number.EPSILON) * 100) / 100; }
+
+    function addItem(preset = {}) {
+      const row = itemTpl.content.firstElementChild.cloneNode(true);
+      row.querySelector('.qty').value = preset.quantity ?? 1;
+      row.querySelector('.unit').value = preset.unit ?? 'UNIT';
+      row.querySelector('.desc').value = preset.description ?? '';
+      row.querySelector('.itemNo').value = preset.item_no ?? '';
+      row.querySelector('.unitPrice').value = preset.per_unit_price ?? 0;
+      row.querySelector('.base').value = preset.base_price ?? 0;
+      row.querySelector('.min').value = preset.min_charge ?? 0;
+      row.addEventListener('input', recalc);
+      row.querySelector('.remove').addEventListener('click', () => { row.remove(); recalc(); });
+      itemsWrap.appendChild(row);
+      recalc();
+    }
+
+    function getLines() {
+      return Array.from(itemsWrap.querySelectorAll('.item-row')).map((row) => ({
+        row,
+        quantity: n(row.querySelector('.qty').value),
+        unit: row.querySelector('.unit').value.trim() || 'UNIT',
+        description: row.querySelector('.desc').value.trim(),
+        item_no: row.querySelector('.itemNo').value.trim(),
+        per_unit_price: n(row.querySelector('.unitPrice').value),
+        base_price: n(row.querySelector('.base').value),
+        min_charge: n(row.querySelector('.min').value)
+      })).filter(x => x.description);
+    }
+
+    function recalc() {
+      const lines = getLines();
+      let subtotal = 0;
+
+      lines.forEach((line) => {
+        const raw = line.base_price + (line.per_unit_price * line.quantity);
+        const amount = round(Math.max(line.min_charge, raw));
+        line.amount = amount;
+        subtotal += amount;
+        line.row.querySelector('.amount').textContent = m(amount);
+      });
+
+      subtotal = round(subtotal);
+      const zone = round((subtotal * n($('zone').value)) / 100);
+      const subAfterZone = round(subtotal + zone);
+      const discountPct = discountByFreq[$('frequency').value] ?? 0;
+      const discount = round((subAfterZone * discountPct) / 100);
+      const taxable = round(subAfterZone - discount);
+      const tax = round((taxable * n($('tax').value)) / 100);
+      const total = round(taxable + tax);
+
+      $('subTotal').textContent = m(subtotal);
+      $('zoneAmt').textContent = m(zone);
+      $('discountAmt').textContent = `-${m(discount)}`;
+      $('taxAmt').textContent = m(tax);
+      $('totalAmt').textContent = m(total);
+
+      renderPrint(lines, { subtotal, zone, discount, tax, total });
+      return { lines, subtotal, zone, discount, tax, total };
+    }
+
+    function value(id) { return $(id).value.trim(); }
+
+    function buildPayload() {
+      const calc = recalc();
+      const address = `${value('serviceAddress')}, ${value('city')} ${value('state')} ${value('zip')}`.trim();
+      const notes = [
+        `Site Contact: ${value('siteContact')}`,
+        `Site Phone: ${value('sitePhone')}`,
+        `Service Date: ${value('serviceDate')}`,
+        `Window: ${value('startTime')} - ${value('endTime')}`,
+        `Truck #: ${value('truckNo')}`,
+        `Operator/Crew: ${value('operatorCrew')}`,
+        `Dump Location: ${value('dumpLocation')}`,
+        `Obstacles: ${value('obstacles')}`,
+        `House Color: ${value('houseColor')}`,
+        `Loaded From (Yards): ${value('loadedFromYards')}`,
+        `Instructions: ${value('instructions')}`,
+        `Comments: ${value('comments')}`,
+      ].filter(Boolean).join(' | ');
+
+      return {
+        quote_template_version: 'barkboys-v1',
+        invoice_number: value('invoiceNo'),
+        quote_number: value('quoteNo'),
+        service_order_fields: {
+          sales_rep: value('salesRep'),
+          service_date: value('serviceDate'),
+          start_time: value('startTime'),
+          end_time: value('endTime'),
+          truck_number: value('truckNo'),
+          operator_crew: value('operatorCrew'),
+          site_contact: value('siteContact'),
+          site_phone: value('sitePhone'),
+          dump_location: value('dumpLocation'),
+          obstacles: value('obstacles'),
+          house_color: value('houseColor'),
+          loaded_from_yards: value('loadedFromYards'),
+          instructions: value('instructions'),
+          comments: value('comments')
+        },
+        api_payload: {
+          job: {
+            customer_name: value('customerName') || 'Unknown Customer',
+            phone: value('customerPhone') || null,
+            address: address || value('serviceAddress') || 'Address required',
+            notes: notes || null,
+            source: 'BarkBoys Quote Tool'
+          },
+          items: calc.lines.map((l) => ({
+            name: l.description,
+            quantity: l.quantity,
+            unit: l.unit,
+            base_price: l.base_price,
+            per_unit_price: l.per_unit_price,
+            min_charge: l.min_charge
+          })),
+          frequency: $('frequency').value,
+          zone_modifier_percent: n($('zone').value),
+          tax_rate: n($('tax').value)
+        }
+      };
+    }
+
+    function downloadJson() {
+      const data = buildPayload();
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      const file = `barkboys-quote-${new Date().toISOString().slice(0,10)}.json`;
+      a.href = URL.createObjectURL(blob);
+      a.download = file;
+      a.click();
+      URL.revokeObjectURL(a.href);
+      $('status').textContent = `Downloaded ${file}`;
+    }
+
+    async function saveApi() {
+      const data = buildPayload();
+      const base = value('apiBase').replace(/\/$/, '');
+      $('status').textContent = 'Saving quote...';
+      $('status').className = 'status';
+      try {
+        const headers = { 'Content-Type': 'application/json' };
+        if (value('apiKey')) headers['X-API-Key'] = value('apiKey');
+
+        const res = await fetch(`${base}/quotes`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(data.api_payload)
+        });
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.detail || 'Save failed');
+        $('quoteNo').value = String(json.id);
+        $('status').textContent = `Saved Quote #${json.id} (Total ${m(json.total)}).`;
+      } catch (err) {
+        $('status').textContent = err.message || 'Save failed';
+        $('status').classList.add('danger');
+      }
+    }
+
+    function renderPrint(lines, totals) {
+      document.querySelectorAll('[data-fill]').forEach((el) => {
+        const key = el.getAttribute('data-fill');
+        const src = document.getElementById(key);
+        el.textContent = src ? src.value : '';
+      });
+
+      const tbody = document.querySelector('#printItemsTable tbody');
+      tbody.innerHTML = '';
+      lines.forEach((line) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${line.quantity}</td>
+          <td>${line.unit}</td>
+          <td>${line.description}</td>
+          <td>${line.item_no || ''}</td>
+          <td class="right">${m(line.per_unit_price)}</td>
+          <td class="right">${m(line.amount || 0)}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      $('pSub').textContent = m(totals.subtotal);
+      $('pZone').textContent = m(totals.zone);
+      $('pDisc').textContent = `-${m(totals.discount)}`;
+      $('pTax').textContent = m(totals.tax);
+      $('pTotal').textContent = m(totals.total);
+    }
+
+    $('addItem').addEventListener('click', () => addItem());
+    $('calcBtn').addEventListener('click', recalc);
+    $('saveBtn').addEventListener('click', saveApi);
+    $('jsonBtn').addEventListener('click', downloadJson);
+    $('printBtn').addEventListener('click', () => { recalc(); window.print(); });
+    ['frequency','zone','tax','customerName','customerPhone','serviceAddress','city','state','zip','quoteNo','quoteDate','invoiceNo','salesRep','siteContact','sitePhone','serviceDate','startTime','endTime','truckNo','operatorCrew','dumpLocation','obstacles','houseColor','loadedFromYards','instructions','comments'].forEach((id) => {
+      $(id).addEventListener('input', recalc);
+      $(id).addEventListener('change', recalc);
+    });
+
+    $('quoteDate').value = todayISO();
+    $('serviceDate').value = todayISO();
+    addItem({ quantity: 2, unit: 'UNIT', description: 'Bark-O-Mulch Delivered', item_no: 'B-DLV', per_unit_price: 228.50, base_price: 0, min_charge: 0 });
+    recalc();
+  </script>
+</body>
+</html>

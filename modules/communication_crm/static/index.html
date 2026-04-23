@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Communication CRM</title>
+  <link rel="stylesheet" href="/crm/static/styles.css" />
+</head>
+<body>
+  <aside class="nav">
+    <strong>Communication CRM</strong>
+    <a href="/staff-crm">Sales Pipeline</a>
+    <a href="/staff-estimator">Estimator</a>
+    <button data-view="dashboard" class="active">Dashboard</button>
+    <button data-view="inbox">Inbox</button>
+    <button data-view="contacts">Contacts</button>
+    <button data-view="quotes">Quotes</button>
+    <button data-view="calls">Calls</button>
+  </aside>
+
+  <main>
+    <header>
+      <div>
+        <p class="eyebrow">Isolated module</p>
+        <h1 id="title">Dashboard</h1>
+      </div>
+      <button id="seed">Load CRM Demo Data</button>
+    </header>
+
+    <section id="dashboard" class="view active">
+      <div id="metrics" class="metrics"></div>
+      <div class="grid">
+        <section class="card">
+          <h2>Recent Activity</h2>
+          <div id="activity"></div>
+        </section>
+        <section class="card">
+          <h2>External Links</h2>
+          <div id="external-links"></div>
+        </section>
+      </div>
+    </section>
+
+    <section id="inbox" class="view">
+      <div class="workspace">
+        <section class="card list-pane">
+          <h2>Conversations</h2>
+          <div id="conversations"></div>
+        </section>
+        <section class="card thread-pane">
+          <h2 id="thread-title">Thread</h2>
+          <div id="thread"></div>
+          <form id="message-form">
+            <input name="body" placeholder="Log an outbound text" />
+            <button type="submit">Send</button>
+          </form>
+        </section>
+        <section class="card">
+          <h2>Contact Summary</h2>
+          <div id="summary"></div>
+        </section>
+      </div>
+    </section>
+
+    <section id="contacts" class="view">
+      <section class="card">
+        <h2>Contacts</h2>
+        <div id="contact-list"></div>
+      </section>
+    </section>
+
+    <section id="quotes" class="view">
+      <section class="card">
+        <h2>CRM Quotes</h2>
+        <div id="quote-list"></div>
+      </section>
+    </section>
+
+    <section id="calls" class="view">
+      <section class="card">
+        <h2>Calls</h2>
+        <div id="call-list"></div>
+      </section>
+    </section>
+  </main>
+
+  <div id="toast" class="toast hidden"></div>
+  <script src="/crm/static/app.js"></script>
+</body>
+</html>

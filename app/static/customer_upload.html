@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>BarkBoys Customer Photo Upload</title>
+  <style>
+    :root {
+      --bg: #f5f8f6;
+      --card: #ffffff;
+      --ink: #102118;
+      --muted: #4f6257;
+      --line: #d7e1db;
+      --brand: #1e6d3b;
+      --brand-dark: #15532d;
+      --danger: #b42318;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: radial-gradient(circle at 15% 0%, #eff7f1 0, var(--bg) 55%, #edf4f0 100%); font-family: "Avenir Next", "Segoe UI", sans-serif; color: var(--ink); padding: 24px; }
+    .wrap { max-width: 760px; margin: 0 auto; }
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 10px 22px rgba(16, 33, 24, 0.05); padding: 18px; }
+    h1 { margin: 0 0 8px; font-size: 1.8rem; }
+    p { margin: 0 0 14px; color: var(--muted); }
+    .row { display: grid; grid-template-columns: repeat(12, 1fr); gap: 10px; margin-bottom: 10px; }
+    .field { display: flex; flex-direction: column; gap: 6px; }
+    .field label { font-size: 0.84rem; font-weight: 700; color: var(--muted); }
+    input, select, textarea, button { border: 1px solid var(--line); border-radius: 10px; font-size: 0.95rem; padding: 10px 11px; font-family: inherit; color: var(--ink); background: #fff; }
+    textarea { min-height: 88px; resize: vertical; }
+    button { border-color: var(--brand); background: var(--brand); color: #fff; cursor: pointer; font-weight: 700; }
+    button:hover { background: var(--brand-dark); }
+    .subtle { font-size: 0.88rem; color: var(--muted); }
+    .disclosure { border: 1px dashed var(--line); border-radius: 10px; padding: 10px; background: #fbfdfb; margin: 8px 0 12px; }
+    .status { margin-top: 12px; min-height: 22px; font-size: 0.92rem; }
+    .ok { color: var(--brand); }
+    .error { color: var(--danger); }
+    .quote-box { margin-top: 10px; border: 1px dashed var(--line); border-radius: 10px; padding: 10px; background: #fbfdfb; display: none; }
+    .quote-box.show { display: block; }
+    .hidden-hp { position: absolute; left: -10000px; top: auto; width: 1px; height: 1px; overflow: hidden; }
+    @media (max-width: 900px) { .field { grid-column: span 12 !important; } }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>BarkBoys Customer Photo Upload</h1>
+      <p>This is the customer form for sending photos and site details to the BarkBoys team.</p>
+      <p class="subtle">BarkBoys staff use a separate internal sales worksheet. iPhone is ideal, but any smartphone works. LiDAR is optional.</p>
+
+      <form id="upload-form">
+        <div class="row">
+          <div class="field" style="grid-column: span 6;">
+            <label for="customer-name">Name *</label>
+            <input id="customer-name" required />
+          </div>
+          <div class="field" style="grid-column: span 6;">
+            <label for="phone">Phone</label>
+            <input id="phone" placeholder="(555) 555-5555" />
+          </div>
+          <div class="field" style="grid-column: span 12;">
+            <label for="email">Email</label>
+            <input id="email" type="email" placeholder="you@example.com" />
+          </div>
+          <div class="field" style="grid-column: span 12;">
+            <label for="address">Service Address *</label>
+            <input id="address" required />
+          </div>
+          <div class="field" style="grid-column: span 12;">
+            <label for="photos">Site Photos (a few) *</label>
+            <input id="photos" type="file" accept="image/*,.heic,.heif" capture="environment" multiple required />
+          </div>
+          <div class="field" style="grid-column: span 4;">
+            <label for="material-type">Blowable Material *</label>
+            <select id="material-type" required>
+              <option value="mulch" selected>Mulch</option>
+              <option value="compost">Compost</option>
+              <option value="soil">Soil</option>
+            </select>
+          </div>
+          <div class="field" style="grid-column: span 8;">
+            <label>Delivery Method</label>
+            <input value="Blower Only" readonly />
+          </div>
+
+          <details style="grid-column: span 12;">
+            <summary>Optional details (improves accuracy)</summary>
+            <div class="row" style="margin-top: 8px;">
+              <div class="field" style="grid-column: span 4;">
+                <label for="capture-device">Device</label>
+                <select id="capture-device">
+                  <option value="any_smartphone" selected>Any Smartphone</option>
+                  <option value="iphone_lidar">iPhone with LiDAR</option>
+                  <option value="iphone_camera">iPhone Camera</option>
+                  <option value="android_camera">Android Camera</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+              <div class="field" style="grid-column: span 4;">
+                <label for="lot-size">Lot Size (sq ft)</label>
+                <input id="lot-size" type="number" step="1" />
+              </div>
+              <div class="field" style="grid-column: span 4;">
+                <label for="edge-length">Edge Length (ft)</label>
+                <input id="edge-length" type="number" step="1" />
+              </div>
+              <div class="field" style="grid-column: span 4;">
+                <label for="turf-condition">Turf Condition</label>
+                <select id="turf-condition">
+                  <option value="healthy">Healthy</option>
+                  <option value="average" selected>Average</option>
+                  <option value="overgrown">Overgrown</option>
+                </select>
+              </div>
+              <div class="field" style="grid-column: span 4;">
+                <label for="slope">Slope</label>
+                <select id="slope">
+                  <option value="flat" selected>Flat</option>
+                  <option value="mild">Mild</option>
+                  <option value="steep">Steep</option>
+                </select>
+              </div>
+              <div class="field" style="grid-column: span 4;">
+                <label for="obstacles-count">Obstacles Count</label>
+                <input id="obstacles-count" type="number" step="1" min="0" value="0" />
+              </div>
+              <div class="field" style="grid-column: span 4;">
+                <label for="debris-level">Debris Level</label>
+                <select id="debris-level">
+                  <option value="low" selected>Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                </select>
+              </div>
+              <div class="field" style="grid-column: span 4;">
+                <label for="has-gates">Gate Access Constraints</label>
+                <select id="has-gates">
+                  <option value="false" selected>No</option>
+                  <option value="true">Yes</option>
+                </select>
+              </div>
+              <div class="field" style="grid-column: span 4;">
+                <label for="include-haulaway">Need Haul-Away?</label>
+                <select id="include-haulaway">
+                  <option value="false" selected>No</option>
+                  <option value="true">Yes</option>
+                </select>
+              </div>
+              <div class="field" style="grid-column: span 4;">
+                <label for="include-blowing">Need Blowing?</label>
+                <select id="include-blowing">
+                  <option value="true" selected>Yes</option>
+                  <option value="false">No</option>
+                </select>
+              </div>
+              <div class="field" style="grid-column: span 12;">
+                <label for="lidar-files">LiDAR files (optional)</label>
+                <input id="lidar-files" type="file" accept=".usdz,.ply,.obj,.las,.laz,.zip" multiple />
+              </div>
+              <div class="field" style="grid-column: span 12;">
+                <label for="notes">Notes</label>
+                <textarea id="notes"></textarea>
+              </div>
+            </div>
+          </details>
+
+          <div class="hidden-hp">
+            <label for="website">Website</label>
+            <input id="website" />
+          </div>
+        </div>
+
+        <button type="submit">Get My Estimate</button>
+        <div id="status" class="status"></div>
+        <div id="quote-box" class="quote-box">
+          <strong>Instant rough estimate:</strong>
+          <div id="quote-range"></div>
+          <div id="quote-note" class="subtle"></div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const files = (id) => Array.from($(id).files || []);
+
+    function fileToBase64Payload(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = String(reader.result || "");
+          const base64 = result.includes(",") ? result.split(",", 2)[1] : result;
+          resolve({
+            file_name: file.name,
+            content_type: file.type || "application/octet-stream",
+            data_base64: base64,
+          });
+        };
+        reader.onerror = () => reject(new Error("Failed to read file"));
+        reader.readAsDataURL(file);
+      });
+    }
+
+    async function filesToPayload(id) {
+      return Promise.all(files(id).map((file) => fileToBase64Payload(file)));
+    }
+
+    $("upload-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      $("status").className = "status";
+      $("status").textContent = "Submitting...";
+      $("quote-box").className = "quote-box";
+
+      const phone = $("phone").value.trim();
+      const email = $("email").value.trim();
+      if (!phone && !email) {
+        $("status").className = "status error";
+        $("status").textContent = "Please enter a phone or email so we can send your estimate.";
+        return;
+      }
+      if (!files("photos").length) {
+        $("status").className = "status error";
+        $("status").textContent = "Please upload at least one photo.";
+        return;
+      }
+
+      const payload = {
+        customer_name: $("customer-name").value.trim(),
+        phone,
+        email,
+        address: $("address").value.trim(),
+        notes: $("notes").value.trim(),
+        capture_device: $("capture-device").value,
+        material_type: $("material-type").value,
+        delivery_truck_type: "single_axle",
+        placement_method: "blown_in",
+        lot_size_sqft: $("lot-size").value.trim(),
+        edge_linear_ft: $("edge-length").value.trim(),
+        turf_condition: $("turf-condition").value,
+        slope: $("slope").value,
+        obstacles_count: $("obstacles-count").value.trim(),
+        debris_level: $("debris-level").value,
+        has_gates: $("has-gates").value,
+        include_haulaway: $("include-haulaway").value,
+        include_blowing: $("include-blowing").value,
+        website: $("website").value.trim(),
+        photos: await filesToPayload("photos"),
+        lidar_files: await filesToPayload("lidar-files"),
+      };
+
+      try {
+        const res = await fetch("/intake-submissions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "Submit failed");
+
+        $("status").className = "status ok";
+        $("status").textContent = `Thanks. Submission #${data.id} received. We will follow up shortly.`;
+
+        if (data.instant_estimate) {
+          const low = Number(data.instant_estimate.range_low || 0).toFixed(2);
+          const high = Number(data.instant_estimate.range_high || 0).toFixed(2);
+          $("quote-range").textContent = `$${low} - $${high}`;
+          $("quote-note").textContent = data.instant_estimate.disclaimer || "Rough estimate only.";
+          $("quote-box").className = "quote-box show";
+        }
+
+        $("upload-form").reset();
+      } catch (error) {
+        $("status").className = "status error";
+        $("status").textContent = error.message || "Submission failed. Please try again.";
+      }
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>BarkBoys Sales Start</title>
+  <style>
+    :root {
+      --bg: #f3f7f4;
+      --card: #ffffff;
+      --ink: #13231a;
+      --muted: #58665f;
+      --line: #d8e2dc;
+      --brand: #1d6a3a;
+      --brand-dark: #15522d;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      font-family: "Avenir Next", "Segoe UI", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top left, rgba(29, 106, 58, 0.12), transparent 30%),
+        linear-gradient(180deg, #f8fbf8 0%, var(--bg) 100%);
+    }
+
+    .panel {
+      width: min(100%, 560px);
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      padding: 34px 28px;
+      box-shadow: 0 18px 40px rgba(19, 35, 26, 0.07);
+      text-align: center;
+      display: grid;
+      gap: 16px;
+    }
+
+    .start {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      min-height: 70px;
+      border-radius: 16px;
+      border: 1px solid var(--brand);
+      background: var(--brand);
+      color: #fff;
+      text-decoration: none;
+      font-size: 1.25rem;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+    }
+
+    .start:hover {
+      background: var(--brand-dark);
+    }
+
+    .links {
+      display: grid;
+      gap: 10px;
+    }
+
+    .secondary {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      min-height: 54px;
+      border-radius: 14px;
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--ink);
+      text-decoration: none;
+      font-size: 1rem;
+      font-weight: 700;
+    }
+
+    .secondary:hover {
+      border-color: var(--brand);
+      color: var(--brand-dark);
+      background: #f8fbf8;
+    }
+
+    .hint {
+      color: var(--muted);
+      font-size: 0.95rem;
+      line-height: 1.45;
+    }
+  </style>
+</head>
+<body>
+  <section class="panel">
+    <div style="font-size: 2rem; font-weight: 800; line-height: 1;">BarkBoys</div>
+    <p class="hint">Start the staff estimator, or go directly to admin pricing to manage costs, labor assumptions, and measurement quote defaults.</p>
+    <div class="links">
+      <a class="start" href="/staff-login">Start Estimator</a>
+      <a class="secondary" href="/admin-pricing">Admin Pricing</a>
+      <a class="secondary" href="/staff-crm">Saved Quotes CRM</a>
+    </div>
+  </section>
+</body>
+</html>
