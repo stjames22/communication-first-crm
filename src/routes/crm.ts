@@ -10,6 +10,7 @@ import {
   updateContact
 } from "../services/contact_service";
 import { listContactTimeline } from "../services/activity_service";
+import { findBlockingDuplicate, searchContactDuplicates } from "../services/duplicate_service";
 import { createTask, listTasks } from "../services/task_service";
 
 export const contactsRouter = Router();
@@ -26,7 +27,8 @@ const contactSchema = z.object({
   preferredContactMethod: z.string().nullable().optional(),
   status: z.string().nullable().optional(),
   source: z.string().nullable().optional(),
-  assignedUserId: z.string().uuid().nullable().optional()
+  assignedUserId: z.string().uuid().nullable().optional(),
+  duplicateWarningAccepted: z.boolean().optional()
 });
 
 const contactPatchSchema = contactSchema.partial().extend({
@@ -59,6 +61,13 @@ const taskSchema = z.object({
   priority: z.string().nullable().optional()
 });
 
+const duplicateQuerySchema = z.object({
+  phone: z.string().optional(),
+  name: z.string().optional(),
+  address: z.string().optional(),
+  zip: z.string().optional()
+});
+
 contactsRouter.get("/", async (_req, res, next) => {
   try {
     res.json(await listContacts());
@@ -67,9 +76,34 @@ contactsRouter.get("/", async (_req, res, next) => {
   }
 });
 
+contactsRouter.get("/duplicates/search", async (req, res, next) => {
+  try {
+    const payload = duplicateQuerySchema.parse(req.query);
+    res.json(await searchContactDuplicates(payload));
+  } catch (error) {
+    next(error);
+  }
+});
+
 contactsRouter.post("/", async (req, res, next) => {
   try {
     const payload = contactSchema.parse(req.body);
+    if (!payload.duplicateWarningAccepted) {
+      const blockingDuplicate = await findBlockingDuplicate({
+        mobilePhone: payload.mobilePhone,
+        secondaryPhone: payload.secondaryPhone,
+        displayName: payload.displayName,
+        firstName: payload.firstName,
+        lastName: payload.lastName
+      });
+
+      if (blockingDuplicate) {
+        return res.status(409).json({
+          error: "Possible existing customer found",
+          duplicate: blockingDuplicate
+        });
+      }
+    }
     const contact = await createContact(payload);
     res.status(201).json(contact);
   } catch (error) {

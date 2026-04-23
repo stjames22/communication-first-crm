@@ -14,6 +14,7 @@ export type ContactInput = {
   status?: string | null;
   source?: string | null;
   assignedUserId?: string | null;
+  duplicateWarningAccepted?: boolean | null;
 };
 
 export type ServiceSiteInput = {
@@ -107,6 +108,17 @@ export async function createContact(input: ContactInput) {
     actorUserId: contact.assigned_user_id,
     metadata: { source: contact.source }
   });
+
+  if (input.duplicateWarningAccepted) {
+    await createActivity({
+      contactId: contact.id,
+      relatedType: "note",
+      activityType: "note.created",
+      title: "Note added",
+      body: "Created after duplicate warning was shown.",
+      actorUserId: contact.assigned_user_id
+    });
+  }
 
   return contact;
 }

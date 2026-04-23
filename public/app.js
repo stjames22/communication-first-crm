@@ -3,11 +3,18 @@ const state = {
   dashboard: null,
   contacts: [],
   conversations: [],
+  tasks: [],
   conversationDetail: null,
   contactDetail: null,
   calls: [],
   quotes: [],
   admin: {},
+  session: null,
+  duplicateSearch: {
+    result: null,
+    requestId: 0,
+    continueAnyway: false
+  },
   selectedConversationId: null,
   selectedContactId: null,
   selectedQuoteId: null,
@@ -31,6 +38,8 @@ $("#quote-contact").addEventListener("change", handleQuoteContactChange);
 $("#conversation-search").addEventListener("input", renderConversations);
 $("#seed-demo").addEventListener("click", handleSeedDemo);
 $("#quick-quote").addEventListener("click", () => switchView("quote"));
+$("#contact-create-form").addEventListener("submit", handleCreateContact);
+$("#contact-create-form").addEventListener("input", handleContactCreateInput);
 
 void initialize();
 
@@ -49,6 +58,7 @@ async function loadWorkspace() {
       tasks,
       calls,
       quotes,
+      session,
       users,
       templates,
       integrations,
@@ -61,6 +71,7 @@ async function loadWorkspace() {
       fetchJson("/api/tasks"),
       fetchJson("/api/calls"),
       fetchJson("/api/quotes"),
+      fetchJson("/auth/session"),
       fetchJson("/api/settings/users"),
       fetchJson("/api/settings/templates"),
       fetchJson("/api/settings/integration-settings"),
@@ -74,6 +85,7 @@ async function loadWorkspace() {
     state.tasks = tasks;
     state.calls = calls;
     state.quotes = quotes;
+    state.session = session;
     state.admin = { users, templates, integrations, quoteDefaults, routing };
     state.offline = false;
   } catch (error) {
@@ -126,14 +138,29 @@ async function loadHealth() {
 }
 
 function renderAll() {
+  renderAuthWarning();
   renderDashboard();
   renderConversations();
   renderThread();
   renderContactSummary("#inbox-summary", getActiveContactSummary());
+  renderDuplicateSearchResult();
   renderContactRecord();
   renderQuoteWorkspace();
   renderCalls();
   renderAdmin();
+}
+
+function renderAuthWarning() {
+  const warning = $("#auth-warning");
+  const message =
+    state.session?.authMode === "scaffold"
+      ? state.session.authWarning || "Scaffold auth only. This demo is not production-secure."
+      : state.offline
+        ? "Offline demo mode active. Authentication and admin settings are not production-secure."
+        : "";
+
+  warning.textContent = message;
+  warning.classList.toggle("hidden", !message);
 }
 
 function renderDashboard() {
@@ -297,6 +324,74 @@ function renderContactRecord() {
   }
 }
 
+function renderDuplicateSearchResult() {
+  const target = $("#duplicate-search-result");
+  const result = state.duplicateSearch.result;
+  const bestMatch = result?.matches?.[0];
+
+  if (!bestMatch) {
+    target.innerHTML = "";
+    return;
+  }
+
+  const latestQuote = bestMatch.latest_quote_summary
+    ? `${escapeHtml(bestMatch.latest_quote_summary.quote_number)} ${quoteBadge(bestMatch.latest_quote_summary.status)}`
+    : "No quote";
+  const latestActivity = bestMatch.latest_activity_summary
+    ? `${escapeHtml(bestMatch.latest_activity_summary.title)} ${formatDate(bestMatch.latest_activity_summary.created_at)}`
+    : "No recent activity";
+  const strengthLabel = {
+    exact: "Exact match",
+    likely: "Likely duplicate",
+    possible: "Possible duplicate"
+  }[bestMatch.match_strength];
+
+  target.innerHTML = `
+    <article class="duplicate-card">
+      <div class="row">
+        <h3>Possible existing customer found</h3>
+        <span class="badge ${escapeAttr(bestMatch.match_strength === "exact" ? "declined" : bestMatch.match_strength)}">${escapeHtml(strengthLabel)}</span>
+      </div>
+      <p>${escapeHtml(bestMatch.reason)}</p>
+      <div class="duplicate-meta">
+        <div>
+          <strong>Customer</strong>
+          <span>${escapeHtml(bestMatch.contact_summary.display_name)}</span>
+        </div>
+        <div>
+          <strong>Phone</strong>
+          <span>${escapeHtml(bestMatch.contact_summary.mobile_phone || "No phone")}</span>
+        </div>
+        <div>
+          <strong>Email</strong>
+          <span>${escapeHtml(bestMatch.contact_summary.email || "No email")}</span>
+        </div>
+        <div>
+          <strong>Address / Site</strong>
+          <span>${escapeHtml(formatSite(bestMatch.site_summary))}</span>
+        </div>
+        <div>
+          <strong>Latest Quote</strong>
+          <span>${latestQuote}</span>
+        </div>
+        <div>
+          <strong>Last Activity</strong>
+          <span>${latestActivity}</span>
+        </div>
+      </div>
+      <div class="duplicate-actions">
+        <button type="button" data-duplicate-action="open-contact" data-contact-id="${escapeAttr(bestMatch.matched_contact_id)}">Open Existing Contact</button>
+        ${
+          bestMatch.matched_site_id
+            ? `<button type="button" data-duplicate-action="use-site" data-contact-id="${escapeAttr(bestMatch.matched_contact_id)}" data-site-id="${escapeAttr(bestMatch.matched_site_id)}">Use Existing Site</button>`
+            : ""
+        }
+        <button class="button-secondary" type="button" data-duplicate-action="continue">Continue Anyway</button>
+      </div>
+    </article>
+  `;
+}
+
 function renderQuoteWorkspace() {
   const contactSelect = $("#quote-contact");
   contactSelect.innerHTML = state.contacts
@@ -419,6 +514,12 @@ async function handleDocumentClick(event) {
     return;
   }
 
+  const duplicateAction = event.target.closest("[data-duplicate-action]");
+  if (duplicateAction) {
+    await handleDuplicateAction(duplicateAction.dataset.duplicateAction, duplicateAction.dataset);
+    return;
+  }
+
   const action = event.target.closest("[data-action]");
   if (action) {
     await handleQuickAction(action.dataset.action);
@@ -447,6 +548,143 @@ async function handleSeedDemo() {
     await loadWorkspace();
   } catch (error) {
     notify(getErrorMessage(error));
+  }
+}
+
+function handleContactCreateInput() {
+  state.duplicateSearch.continueAnyway = false;
+  scheduleDuplicateSearch();
+}
+
+function scheduleDuplicateSearch() {
+  window.clearTimeout(scheduleDuplicateSearch.timeout);
+  scheduleDuplicateSearch.timeout = window.setTimeout(() => {
+    void runDuplicateSearch();
+  }, 320);
+}
+
+async function runDuplicateSearch() {
+  const payload = getContactCreatePayload();
+  if (state.offline) {
+    state.duplicateSearch.result = null;
+    renderDuplicateSearchResult();
+    return null;
+  }
+
+  if (!payload.mobilePhone && !payload.displayName && !payload.firstName && !payload.lastName && !payload.addressLine1) {
+    state.duplicateSearch.result = null;
+    renderDuplicateSearchResult();
+    return null;
+  }
+
+  const requestId = state.duplicateSearch.requestId + 1;
+  state.duplicateSearch.requestId = requestId;
+  const params = new URLSearchParams();
+  const fullName = payload.displayName || [payload.firstName, payload.lastName].filter(Boolean).join(" ").trim();
+
+  if (payload.mobilePhone) {
+    params.set("phone", payload.mobilePhone);
+  }
+  if (fullName) {
+    params.set("name", fullName);
+  }
+  if (payload.addressLine1 || payload.city || payload.state) {
+    params.set("address", [payload.addressLine1, payload.city, payload.state].filter(Boolean).join(", "));
+  }
+  if (payload.zip) {
+    params.set("zip", payload.zip);
+  }
+
+  const result = await fetchJson(`/api/contacts/duplicates/search?${params.toString()}`);
+  if (requestId !== state.duplicateSearch.requestId) {
+    return null;
+  }
+
+  state.duplicateSearch.result = result;
+  renderDuplicateSearchResult();
+  return result;
+}
+
+async function handleCreateContact(event) {
+  event.preventDefault();
+
+  if (state.offline) {
+    notify("Contact creation is unavailable in offline sample mode.");
+    return;
+  }
+
+  const payload = getContactCreatePayload();
+  const duplicateResult = (await runDuplicateSearch()) || state.duplicateSearch.result;
+  const bestMatch = duplicateResult?.matches?.[0] || null;
+  const isStrongMatch = bestMatch && ["exact", "likely"].includes(bestMatch.match_strength);
+
+  if (isStrongMatch && !state.duplicateSearch.continueAnyway) {
+    notify("Possible existing customer found.");
+    renderDuplicateSearchResult();
+    return;
+  }
+
+  try {
+    const contact = await fetchJson("/api/contacts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        displayName: payload.displayName || null,
+        firstName: payload.firstName || null,
+        lastName: payload.lastName || null,
+        mobilePhone: payload.mobilePhone,
+        secondaryPhone: payload.secondaryPhone || null,
+        email: payload.email || null,
+        duplicateWarningAccepted: state.duplicateSearch.continueAnyway && Boolean(bestMatch)
+      })
+    });
+
+    if (payload.addressLine1 && payload.city && payload.state && payload.zip) {
+      await fetchJson(`/api/contacts/${contact.id}/sites`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          label: "Primary",
+          addressLine1: payload.addressLine1,
+          city: payload.city,
+          state: payload.state,
+          zip: payload.zip
+        })
+      });
+    }
+
+    resetContactCreateForm();
+    await loadWorkspace();
+    state.selectedContactId = contact.id;
+    state.contactTab = "overview";
+    await loadSelectedRecords();
+    switchView("contact");
+    renderAll();
+    notify("Contact created.");
+  } catch (error) {
+    if (error instanceof Error && error.message === "Possible existing customer found") {
+      notify(error.message);
+      await runDuplicateSearch();
+      return;
+    }
+    notify(getErrorMessage(error));
+  }
+}
+
+async function handleDuplicateAction(action, dataset) {
+  if (action === "open-contact" || action === "use-site") {
+    state.selectedContactId = dataset.contactId;
+    state.contactTab = action === "use-site" ? "sites" : "overview";
+    await loadSelectedRecords();
+    switchView("contact");
+    renderAll();
+    notify(action === "use-site" ? "Opened existing customer and site." : "Opened existing contact.");
+    return;
+  }
+
+  if (action === "continue") {
+    state.duplicateSearch.continueAnyway = true;
+    await handleCreateContact(new Event("submit"));
   }
 }
 
@@ -712,6 +950,29 @@ function getErrorMessage(error) {
   return error instanceof Error ? error.message : "Something went wrong.";
 }
 
+function getContactCreatePayload() {
+  const data = new FormData($("#contact-create-form"));
+  return {
+    displayName: String(data.get("displayName") || "").trim(),
+    firstName: String(data.get("firstName") || "").trim(),
+    lastName: String(data.get("lastName") || "").trim(),
+    mobilePhone: String(data.get("mobilePhone") || "").trim(),
+    secondaryPhone: String(data.get("secondaryPhone") || "").trim(),
+    email: String(data.get("email") || "").trim(),
+    addressLine1: String(data.get("addressLine1") || "").trim(),
+    city: String(data.get("city") || "").trim(),
+    state: String(data.get("state") || "").trim(),
+    zip: String(data.get("zip") || "").trim()
+  };
+}
+
+function resetContactCreateForm() {
+  $("#contact-create-form").reset();
+  state.duplicateSearch.result = null;
+  state.duplicateSearch.continueAnyway = false;
+  renderDuplicateSearchResult();
+}
+
 function escapeHtml(value) {
   return String(value ?? "")
     .replace(/&/g, "&amp;")
@@ -747,7 +1008,7 @@ function hydrateOfflineData() {
     primary_site: site,
     sites: [site],
     tags: [{ name: "New Lead", color: "#2563eb" }],
-    latest_quote: { id: "quote-demo", quote_number: "BBQ-2026-0001", status: "draft", grand_total: 1940 }
+    latest_quote: { id: "quote-demo", quote_number: "QTE-2026-0001", status: "draft", grand_total: 1940 }
   };
   state.contacts = [contact];
   state.conversations = [
@@ -776,8 +1037,8 @@ function hydrateOfflineData() {
     {
       id: "quote-demo",
       contact_id: contact.id,
-      quote_number: "BBQ-2026-0001",
-      title: "Barkboys backyard refresh",
+      quote_number: "QTE-2026-0001",
+      title: "Backyard refresh quote",
       status: "draft",
       grand_total: 1940
     }
@@ -787,7 +1048,7 @@ function hydrateOfflineData() {
       id: "task-demo",
       contact_id: contact.id,
       display_name: contact.display_name,
-      title: "Reply with Barkboys quote draft",
+      title: "Reply with quote draft",
       priority: "high",
       due_at: now
     }
@@ -817,10 +1078,15 @@ function hydrateOfflineData() {
   };
   state.admin = {
     users: [{ full_name: "Jamie Stone", role: "admin" }],
-    templates: [{ name: "Quote ready", body: "Your Barkboys quote is ready." }],
+    templates: [{ name: "Quote ready", body: "Your quote is ready." }],
     integrations: { persisted: [{ provider_type: "sms", provider_name: "twilio", enabled: false }] },
-    quoteDefaults: [{ label: "Barkboys default", default_delivery_total: 95 }],
-    routing: [{ label: "Main Barkboys line", inbound_number: "+15035550000", destination_value: "sales" }]
+    quoteDefaults: [{ label: "Default delivery", default_delivery_total: 95 }],
+    routing: [{ label: "Main line", inbound_number: "+15035550000", destination_value: "sales" }]
+  };
+  state.session = {
+    authenticated: true,
+    authMode: "scaffold",
+    authWarning: "Offline demo mode active. Scaffold auth is not production-secure."
   };
 }
 
@@ -832,7 +1098,7 @@ function makeOfflineConversationDetail() {
       {
         id: "m1",
         direction: "inbound",
-        body: "Hi, can Barkboys quote mulch and cleanup for my front beds?",
+        body: "Hi, can you quote mulch and cleanup for my front beds?",
         delivery_status: "received",
         created_at: new Date(Date.now() - 30 * 60 * 1000).toISOString()
       },

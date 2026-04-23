@@ -5,10 +5,10 @@ export async function sendQuoteSmsNotification(input: {
   quoteNumber: string;
   quoteUrl: string;
 }) {
-  return sendProviderSms(
-    input.toNumber,
-    `Your Barkboys quote ${input.quoteNumber} is ready: ${input.quoteUrl}`
-  );
+  return sendProviderSms({
+    toNumber: input.toNumber,
+    body: `Your quote ${input.quoteNumber} is ready: ${input.quoteUrl}`
+  });
 }
 
 export async function sendQuoteEmailNotification(input: {
@@ -22,6 +22,6 @@ export async function sendQuoteEmailNotification(input: {
     deliveryStatus: "queued",
     providerMessageId: `mock-email-${Date.now()}`,
     toEmail: input.toEmail,
-    subject: `Your Barkboys quote ${input.quoteNumber}`
+    subject: `Your quote ${input.quoteNumber}`
   };
 }

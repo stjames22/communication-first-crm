@@ -21,7 +21,8 @@ authV2Router.get("/session", async (_req, res, next) => {
     res.json({
       authenticated: Boolean(result.rows[0]),
       user: result.rows[0] ?? null,
-      authMode: "scaffold"
+      authMode: "scaffold",
+      authWarning: "Scaffold auth only. This demo workflow is not production-secure."
     });
   } catch (error) {
     next(error);
@@ -43,11 +44,14 @@ authV2Router.post("/login", async (req, res, next) => {
       return res.status(401).json({ error: "No active user found for that email" });
     }
 
-    // TODO(auth): replace scaffold login with signed sessions or SSO.
+    // TODO(auth): replace scaffold login with signed server sessions.
+    // TODO(auth): alternatively support SSO if that matches staff workflow better.
+    // TODO(auth): if password auth is used, add hashing, logout, session rotation, and role enforcement.
     res.json({
       authenticated: true,
       user: result.rows[0],
-      authMode: "scaffold"
+      authMode: "scaffold",
+      authWarning: "Scaffold auth only. This demo workflow is not production-secure."
     });
   } catch (error) {
     next(error);

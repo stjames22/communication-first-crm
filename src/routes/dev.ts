@@ -8,12 +8,14 @@ devRouter.post("/seed-demo", async (_req, res, next) => {
     return res.status(404).json({ error: "Not found" });
   }
 
-  const client = await pool.connect();
+  let client;
 
   try {
+    client = await pool.connect();
     await client.query("BEGIN");
     await client.query(
       `TRUNCATE
+        external_references,
         attachments,
         quote_line_items,
         quote_versions,
@@ -39,7 +41,7 @@ devRouter.post("/seed-demo", async (_req, res, next) => {
     const admin = (
       await client.query(
         `INSERT INTO users (full_name, email, role)
-         VALUES ('Jamie Stone', 'jamie@barkboys.example', 'admin')
+         VALUES ('Jamie Stone', 'jamie@example.com', 'admin')
          RETURNING *`
       )
     ).rows[0];
@@ -47,7 +49,7 @@ devRouter.post("/seed-demo", async (_req, res, next) => {
     const staff = (
       await client.query(
         `INSERT INTO users (full_name, email, role)
-         VALUES ('Morgan Lee', 'morgan@barkboys.example', 'sales')
+         VALUES ('Morgan Lee', 'morgan@example.com', 'sales')
          RETURNING *`
       )
     ).rows[0];
@@ -67,7 +69,7 @@ devRouter.post("/seed-demo", async (_req, res, next) => {
     const account = (
       await client.query(
         `INSERT INTO accounts (company_name, billing_address, notes)
-         VALUES ('Barkboys Demo Accounts', '148 Cedar Run, Portland, OR 97205', 'Commercial and residential demo customers.')
+         VALUES ('Demo Accounts', '148 Cedar Run, Portland, OR 97205', 'Commercial and residential demo customers.')
          RETURNING *`
       )
     ).rows[0];
@@ -131,10 +133,10 @@ devRouter.post("/seed-demo", async (_req, res, next) => {
       `INSERT INTO messages
        (conversation_id, contact_id, direction, channel, provider_message_id, body, delivery_status, created_at, sent_by_user_id)
        VALUES
-         ($1, $4, 'inbound', 'sms', 'demo-kyle-1', 'Hi, can Barkboys quote mulch and cleanup for my front beds?', 'received', NOW() - INTERVAL '34 minutes', NULL),
+         ($1, $4, 'inbound', 'sms', 'demo-kyle-1', 'Hi, can you quote mulch and cleanup for my front beds?', 'received', NOW() - INTERVAL '34 minutes', NULL),
          ($1, $4, 'outbound', 'sms', 'demo-kyle-2', 'Absolutely. I can build that from your site notes and send a quote here.', 'sent', NOW() - INTERVAL '20 minutes', $7),
          ($1, $4, 'inbound', 'sms', 'demo-kyle-3', 'Great. Please include delivery and a simple edging option.', 'received', NOW() - INTERVAL '12 minutes', NULL),
-         ($2, $5, 'outbound', 'sms', 'demo-avery-1', 'Your Barkboys quote BBQ-2026-0001 is ready. Want me to adjust the delivery window?', 'sent', NOW() - INTERVAL '2 hours', $7),
+         ($2, $5, 'outbound', 'sms', 'demo-avery-1', 'Your quote QTE-2026-0001 is ready. Want me to adjust the delivery window?', 'sent', NOW() - INTERVAL '2 hours', $7),
          ($3, $6, 'outbound', 'sms', 'demo-riley-1', 'Thanks for accepting. We will confirm install timing next.', 'sent', NOW() - INTERVAL '1 day', $8)`,
       [conversations[0].id, conversations[1].id, conversations[2].id, kyle.id, avery.id, riley.id, staff.id, admin.id]
     );
@@ -152,7 +154,7 @@ devRouter.post("/seed-demo", async (_req, res, next) => {
       await client.query(
         `INSERT INTO quotes
          (contact_id, service_site_id, quote_number, title, status, subtotal, delivery_total, tax_total, grand_total, sent_at, created_by_user_id)
-         VALUES ($1, $2, 'BBQ-2026-0001', 'Barkboys backyard refresh', 'sent', 1845.00, 95.00, 0.00, 1940.00, NOW() - INTERVAL '2 hours', $3)
+         VALUES ($1, $2, 'QTE-2026-0001', 'Backyard refresh quote', 'sent', 1845.00, 95.00, 0.00, 1940.00, NOW() - INTERVAL '2 hours', $3)
          RETURNING *`,
         [avery.id, sites[1].id, staff.id]
       )
@@ -162,11 +164,11 @@ devRouter.post("/seed-demo", async (_req, res, next) => {
       await client.query(
         `INSERT INTO quote_versions
          (quote_id, version_number, pricing_snapshot_json, notes, subtotal, delivery_total, tax_total, grand_total, created_by_user_id)
-         VALUES ($1, 1, $2::jsonb, 'Initial Barkboys demo quote with manual delivery override.', 1845.00, 95.00, 0.00, 1940.00, $3)
+         VALUES ($1, 1, $2::jsonb, 'Initial demo quote with manual delivery override.', 1845.00, 95.00, 0.00, 1940.00, $3)
          RETURNING *`,
         [
           averyQuote.id,
-          JSON.stringify({ manualOverrides: { delivery_total: 95 }, source: "barkboys-example" }),
+          JSON.stringify({ manualOverrides: { delivery_total: 95 }, source: "demo-example" }),
           staff.id
         ]
       )
@@ -176,8 +178,8 @@ devRouter.post("/seed-demo", async (_req, res, next) => {
       `INSERT INTO quote_line_items
        (quote_version_id, item_type, name, description, quantity, unit, unit_price, total_price, sort_order, source_reference)
        VALUES
-         ($1, 'service', 'Mulch installation', 'Premium bark mulch install across backyard beds.', 8, 'yard', 145.00, 1160.00, 1, 'barkboys mulch'),
-         ($1, 'service', 'Bed cleanup', 'Debris removal, shaping, and light weed removal.', 1, 'project', 485.00, 485.00, 2, 'barkboys cleanup'),
+         ($1, 'service', 'Mulch installation', 'Premium bark mulch install across backyard beds.', 8, 'yard', 145.00, 1160.00, 1, 'mulch service'),
+         ($1, 'service', 'Bed cleanup', 'Debris removal, shaping, and light weed removal.', 1, 'project', 485.00, 485.00, 2, 'cleanup service'),
          ($1, 'adjustment', 'Manual slope adjustment', 'Extra handling for side-yard access.', 1, 'each', 200.00, 200.00, 3, 'manual override')`,
       [averyVersion.id]
     );
@@ -188,7 +190,7 @@ devRouter.post("/seed-demo", async (_req, res, next) => {
       await client.query(
         `INSERT INTO quotes
          (contact_id, service_site_id, quote_number, title, status, current_version_id, subtotal, delivery_total, tax_total, grand_total, sent_at, accepted_at, created_by_user_id)
-         VALUES ($1, $2, 'BBQ-2026-0002', 'Spring refresh accepted quote', 'accepted', NULL, 980.00, 75.00, 0.00, 1055.00, NOW() - INTERVAL '3 days', NOW() - INTERVAL '1 day', $3)
+         VALUES ($1, $2, 'QTE-2026-0002', 'Spring refresh accepted quote', 'accepted', NULL, 980.00, 75.00, 0.00, 1055.00, NOW() - INTERVAL '3 days', NOW() - INTERVAL '1 day', $3)
          RETURNING *`,
         [riley.id, sites[2].id, admin.id]
       )
@@ -219,7 +221,7 @@ devRouter.post("/seed-demo", async (_req, res, next) => {
       `INSERT INTO tasks (contact_id, assigned_user_id, title, due_at, status, priority)
        VALUES
          ($1, $4, 'Reply with quote draft including edging option', NOW() + INTERVAL '1 hour', 'open', 'high'),
-         ($2, $4, 'Follow up on sent Barkboys quote', NOW() + INTERVAL '1 day', 'open', 'normal'),
+         ($2, $4, 'Follow up on sent quote', NOW() + INTERVAL '1 day', 'open', 'normal'),
          ($3, $5, 'Confirm accepted quote schedule', NOW() + INTERVAL '2 days', 'open', 'normal')`,
       [kyle.id, avery.id, riley.id, staff.id, admin.id]
     );
@@ -230,10 +232,10 @@ devRouter.post("/seed-demo", async (_req, res, next) => {
          ($1, 'message', NULL, 'message.inbound', 'Inbound text received', 'Great. Please include delivery and a simple edging option.', NULL, '{}'::jsonb, NOW() - INTERVAL '12 minutes'),
          ($1, 'call', NULL, 'call.missed', 'Missed call', 'Missed inbound call from Kyle Bennett.', $4, '{}'::jsonb, NOW() - INTERVAL '45 minutes'),
          ($1, 'task', NULL, 'task.created', 'Task created', 'Reply with quote draft including edging option', $4, '{}'::jsonb, NOW() - INTERVAL '10 minutes'),
-         ($2, 'quote', $6, 'quote.created', 'Quote created', 'BBQ-2026-0001 was created for Barkboys backyard refresh.', $4, '{"version":1}'::jsonb, NOW() - INTERVAL '3 hours'),
-         ($2, 'quote', $6, 'quote.sent.sms', 'Quote sent by SMS', 'BBQ-2026-0001 was sent by text.', $4, '{}'::jsonb, NOW() - INTERVAL '2 hours'),
+         ($2, 'quote', $6, 'quote.created', 'Quote created', 'QTE-2026-0001 was created for Backyard refresh quote.', $4, '{"version":1}'::jsonb, NOW() - INTERVAL '3 hours'),
+         ($2, 'quote', $6, 'quote.sent.sms', 'Quote sent by SMS', 'QTE-2026-0001 was sent by text.', $4, '{}'::jsonb, NOW() - INTERVAL '2 hours'),
          ($2, 'call', NULL, 'call.disposition', 'Call disposition saved', 'Left voicemail about delivery options.', $4, '{"disposition":"left_voicemail"}'::jsonb, NOW() - INTERVAL '3 hours'),
-         ($3, 'quote', $7, 'quote.accepted', 'Quote accepted', 'BBQ-2026-0002 was marked accepted.', $5, '{}'::jsonb, NOW() - INTERVAL '1 day'),
+         ($3, 'quote', $7, 'quote.accepted', 'Quote accepted', 'QTE-2026-0002 was marked accepted.', $5, '{}'::jsonb, NOW() - INTERVAL '1 day'),
          ($3, 'message', NULL, 'message.outbound', 'Outbound text sent', 'Thanks for accepting. We will confirm install timing next.', $5, '{}'::jsonb, NOW() - INTERVAL '1 day')`,
       [kyle.id, avery.id, riley.id, staff.id, admin.id, averyQuote.id, rileyQuote.id]
     );
@@ -241,19 +243,19 @@ devRouter.post("/seed-demo", async (_req, res, next) => {
     await client.query(
       `INSERT INTO message_templates (name, channel, body)
        VALUES
-         ('Quote ready', 'sms', 'Your Barkboys quote is ready. Want me to send it here?'),
+         ('Quote ready', 'sms', 'Your quote is ready. Want me to send it here?'),
          ('Missed call', 'sms', 'Sorry we missed you. What is the best time to call back?'),
-         ('Follow-up', 'sms', 'Quick follow-up on your Barkboys quote. Would you like any changes?')`
+         ('Follow-up', 'sms', 'Quick follow-up on your quote. Would you like any changes?')`
     );
 
     await client.query(
       `INSERT INTO phone_routing_settings (label, inbound_number, destination_type, destination_value)
-       VALUES ('Main Barkboys line', '+15035550000', 'queue', 'sales')`
+       VALUES ('Main line', '+15035550000', 'queue', 'sales')`
     );
 
     await client.query(
       `INSERT INTO quote_defaults (label, tax_rate, default_delivery_total, terms)
-       VALUES ('Barkboys default', 0, 95.00, 'Quote valid for 14 days. Delivery may vary by zone.')`
+       VALUES ('Default delivery', 0, 95.00, 'Quote valid for 14 days. Delivery may vary by zone.')`
     );
 
     await client.query(
@@ -267,11 +269,11 @@ devRouter.post("/seed-demo", async (_req, res, next) => {
       `INSERT INTO external_references
        (internal_type, internal_id, external_system, external_type, external_id, metadata_json)
        VALUES
-         ('quote', $1, 'barkboys', 'estimate', 'BB-DEMO-EST-0001', $2::jsonb)`,
+         ('quote', $1, 'legacy-system', 'estimate', 'EXT-DEMO-EST-0001', $2::jsonb)`,
       [
         averyQuote.id,
         JSON.stringify({
-          note: "Example bridge for a future BarkBoys estimator quote.",
+          note: "Example bridge for a future external estimator quote.",
           quoteNumber: averyQuote.quote_number
         })
       ]
@@ -280,9 +282,11 @@ devRouter.post("/seed-demo", async (_req, res, next) => {
     await client.query("COMMIT");
     res.json({ ok: true, contacts: contacts.length, quotes: 2 });
   } catch (error) {
-    await client.query("ROLLBACK");
+    if (client) {
+      await client.query("ROLLBACK");
+    }
     next(error);
   } finally {
-    client.release();
+    client?.release();
   }
 });

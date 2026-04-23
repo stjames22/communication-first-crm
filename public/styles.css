@@ -192,6 +192,21 @@ textarea {
   color: var(--red);
 }
 
+.app-warning {
+  margin-top: 10px;
+  border: 1px solid #f0b2ab;
+  border-radius: 8px;
+  background: #fff3f1;
+  color: #8f2d23;
+  padding: 10px 12px;
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.admin-warning {
+  margin-bottom: 16px;
+}
+
 .badge.sent {
   background: #ede9fe;
   color: var(--violet);
@@ -258,6 +273,76 @@ textarea {
   color: var(--muted);
   font-size: 0.82rem;
   font-weight: 700;
+}
+
+.contact-entry-panel {
+  margin-bottom: 16px;
+}
+
+.contact-create-form {
+  padding: 14px;
+}
+
+.contact-create-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.contact-create-grid label {
+  display: grid;
+  gap: 6px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.contact-create-wide {
+  grid-column: 1 / -1;
+}
+
+.duplicate-card {
+  margin: 14px 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfdff;
+  padding: 14px;
+}
+
+.duplicate-card h3 {
+  margin: 0 0 6px;
+  font-size: 1rem;
+}
+
+.duplicate-card p {
+  margin: 0 0 10px;
+  color: var(--muted);
+}
+
+.duplicate-meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 16px;
+  margin-bottom: 12px;
+}
+
+.duplicate-meta strong {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 0.76rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.duplicate-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.button-secondary {
+  background: var(--soft);
+  color: var(--muted);
 }
 
 .two-column,
@@ -549,6 +634,11 @@ fieldset > * + * {
   }
 
   .line-item {
+    grid-template-columns: 1fr;
+  }
+
+  .contact-create-grid,
+  .duplicate-meta {
     grid-template-columns: 1fr;
   }
 }

@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { query } from "../lib/db";
-import { getIntegrationStatus } from "../services/integration_service";
+import { getIntegrationStatus, upsertIntegrationSetting } from "../services/integration_service";
 
 export const adminV2Router = Router();
 
@@ -18,6 +18,17 @@ const phoneRoutingSchema = z.object({
   destinationType: z.string().default("queue"),
   destinationValue: z.string().min(1),
   isActive: z.boolean().optional()
+});
+
+const integrationSettingsSchema = z.object({
+  providerType: z.enum(["sms", "voice"]),
+  providerName: z.enum(["twilio", "ringcentral", "telnyx", "generic_webhook"]),
+  enabled: z.boolean().optional(),
+  defaultFromNumber: z.string().nullable().optional(),
+  webhookSigningSecret: z.string().nullable().optional(),
+  providerCredentials: z.record(z.unknown()).optional(),
+  routingRules: z.record(z.unknown()).optional(),
+  activeSmsProvider: z.enum(["twilio", "ringcentral", "telnyx", "generic_webhook"]).optional()
 });
 
 adminV2Router.get("/templates", async (_req, res, next) => {
@@ -97,9 +108,30 @@ adminV2Router.get("/integration-settings", async (_req, res, next) => {
   try {
     const persisted = await query("SELECT * FROM integration_settings ORDER BY provider_type, provider_name");
     res.json({
-      runtime: getIntegrationStatus(),
+      runtime: await getIntegrationStatus(),
       persisted: persisted.rows
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+adminV2Router.post("/integration-settings", async (req, res, next) => {
+  try {
+    const payload = integrationSettingsSchema.parse(req.body);
+    const result = await upsertIntegrationSetting({
+      providerType: payload.providerType,
+      providerName: payload.providerName,
+      enabled: payload.enabled ?? false,
+      settings: {
+        active_sms_provider: payload.activeSmsProvider ?? null,
+        default_from_number: payload.defaultFromNumber ?? null,
+        webhook_signing_secret: payload.webhookSigningSecret ?? null,
+        provider_credentials: payload.providerCredentials ?? {},
+        routing_rules: payload.routingRules ?? {}
+      }
+    });
+    res.status(201).json(result);
   } catch (error) {
     next(error);
   }

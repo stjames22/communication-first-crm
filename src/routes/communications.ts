@@ -1,13 +1,20 @@
 import { Router } from "express";
 import { z } from "zod";
 import { getConversation, listConversations, markConversationRead } from "../services/conversation_service";
+import {
+  normalizeInboundSmsByProvider,
+  normalizeSmsStatusByProvider
+} from "../services/integration_service";
 import { logInboundSms, sendOutboundSms, updateSmsStatus } from "../services/message_service";
+import type { SupportedProviderName } from "../services/message_provider";
 
 export const conversationsV2Router = Router();
 export const smsWebhooksRouter = Router();
+export const providerSmsWebhooksRouter = Router({ mergeParams: true });
 
 const outboundMessageSchema = z.object({
   body: z.string().min(1),
+  mediaUrls: z.array(z.string().url()).optional(),
   sentByUserId: z.string().uuid().nullable().optional()
 });
 
@@ -29,6 +36,10 @@ const smsStatusSchema = z.object({
   deliveryStatus: z.string().optional(),
   MessageSid: z.string().optional(),
   MessageStatus: z.string().optional()
+});
+
+const providerParamSchema = z.object({
+  provider: z.enum(["twilio", "ringcentral", "telnyx", "generic_webhook"])
 });
 
 conversationsV2Router.get("/", async (_req, res, next) => {
@@ -59,6 +70,7 @@ conversationsV2Router.post("/:id/messages", async (req, res, next) => {
     const message = await sendOutboundSms({
       conversationId: req.params.id,
       body: payload.body,
+      mediaUrls: payload.mediaUrls ?? [],
       sentByUserId: payload.sentByUserId ?? null
     });
 
@@ -86,7 +98,9 @@ smsWebhooksRouter.post("/inbound", async (req, res, next) => {
       fromNumber,
       toNumber,
       body: payload.body ?? payload.Body ?? "",
+      providerName: "generic_webhook",
       providerMessageId: payload.providerMessageId ?? payload.MessageSid ?? null,
+      providerConversationId: null,
       mediaCount: payload.mediaCount ?? payload.NumMedia ?? 0
     });
 
@@ -106,8 +120,40 @@ smsWebhooksRouter.post("/status", async (req, res, next) => {
       return res.status(400).json({ error: "providerMessageId and deliveryStatus are required" });
     }
 
-    const message = await updateSmsStatus(providerMessageId, deliveryStatus);
+    const message = await updateSmsStatus({
+      providerName: "generic_webhook",
+      providerMessageId,
+      deliveryStatus
+    });
     res.json(message ?? { ok: true, ignored: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
+providerSmsWebhooksRouter.post("/inbound", async (req, res, next) => {
+  try {
+    const { provider } = providerParamSchema.parse(req.params);
+    const normalized = await normalizeInboundSmsByProvider(provider as SupportedProviderName, req.body, req.headers);
+    const result = await logInboundSms({
+      ...normalized,
+      providerName: provider as SupportedProviderName
+    });
+    res.status(201).json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+providerSmsWebhooksRouter.post("/status", async (req, res, next) => {
+  try {
+    const { provider } = providerParamSchema.parse(req.params);
+    const normalized = await normalizeSmsStatusByProvider(provider as SupportedProviderName, req.body, req.headers);
+    const result = await updateSmsStatus({
+      ...normalized,
+      providerName: provider as SupportedProviderName
+    });
+    res.json(result ?? { ok: true, ignored: true });
   } catch (error) {
     next(error);
   }

@@ -389,5 +389,5 @@ function calculateTotals(lineItems: QuoteLineItemInput[], deliveryTotal: number,
 async function nextQuoteNumber(client: { query: (text: string, params?: unknown[]) => Promise<{ rows: Array<{ next_quote: number }> }> }) {
   const result = await client.query("SELECT COUNT(*)::int + 1 AS next_quote FROM quotes");
   const nextQuote = Number(result.rows[0].next_quote);
-  return `BBQ-${new Date().getFullYear()}-${String(nextQuote).padStart(4, "0")}`;
+  return `QTE-${new Date().getFullYear()}-${String(nextQuote).padStart(4, "0")}`;
 }

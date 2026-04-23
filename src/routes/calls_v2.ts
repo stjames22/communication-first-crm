@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
+import { normalizeInboundCallByProvider } from "../services/integration_service";
 import {
   listCalls,
   logInboundCall,
@@ -7,9 +8,11 @@ import {
   startOutboundCall,
   updateCallStatus
 } from "../services/call_service";
+import type { SupportedProviderName } from "../services/message_provider";
 
 export const callsV2Router = Router();
 export const callWebhooksRouter = Router();
+export const providerCallWebhooksRouter = Router({ mergeParams: true });
 
 const outboundCallSchema = z.object({
   contactId: z.string().uuid(),
@@ -44,6 +47,10 @@ const dispositionSchema = z.object({
   disposition: z.string().min(1),
   notes: z.string().nullable().optional(),
   actorUserId: z.string().uuid().nullable().optional()
+});
+
+const providerParamSchema = z.object({
+  provider: z.enum(["twilio", "ringcentral", "telnyx", "generic_webhook"])
 });
 
 callsV2Router.get("/", async (_req, res, next) => {
@@ -93,7 +100,9 @@ callWebhooksRouter.post("/inbound", async (req, res, next) => {
     const call = await logInboundCall({
       fromNumber,
       toNumber,
+      providerName: "generic_webhook",
       providerCallId: payload.providerCallId ?? payload.CallSid ?? null,
+      providerConversationId: null,
       status: payload.status ?? payload.CallStatus ?? null
     });
 
@@ -113,6 +122,7 @@ callWebhooksRouter.post("/status", async (req, res, next) => {
     }
 
     const call = await updateCallStatus({
+      providerName: "generic_webhook",
       providerCallId,
       status: payload.status ?? payload.CallStatus ?? null,
       durationSeconds: payload.durationSeconds ?? payload.CallDuration ?? null,
@@ -120,6 +130,47 @@ callWebhooksRouter.post("/status", async (req, res, next) => {
       voicemailUrl: payload.voicemailUrl ?? null
     });
 
+    res.json(call ?? { ok: true, ignored: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
+providerCallWebhooksRouter.post("/inbound", async (req, res, next) => {
+  try {
+    const { provider } = providerParamSchema.parse(req.params);
+    const normalized = await normalizeInboundCallByProvider(provider as SupportedProviderName, req.body, req.headers);
+    const call = await logInboundCall({
+      fromNumber: normalized.fromNumber,
+      toNumber: normalized.toNumber,
+      providerName: provider as SupportedProviderName,
+      providerCallId: normalized.providerCallId ?? null,
+      providerConversationId: normalized.providerConversationId ?? null,
+      status: normalized.status ?? null
+    });
+    res.status(201).json(call);
+  } catch (error) {
+    next(error);
+  }
+});
+
+providerCallWebhooksRouter.post("/status", async (req, res, next) => {
+  try {
+    const { provider } = providerParamSchema.parse(req.params);
+    const normalized = await normalizeInboundCallByProvider(provider as SupportedProviderName, req.body, req.headers);
+    if (!normalized.providerCallId) {
+      return res.status(400).json({ error: "providerCallId is required" });
+    }
+
+    const call = await updateCallStatus({
+      providerName: provider as SupportedProviderName,
+      providerCallId: normalized.providerCallId,
+      providerConversationId: normalized.providerConversationId ?? null,
+      status: normalized.status ?? null,
+      durationSeconds: normalized.durationSeconds ?? null,
+      recordingUrl: normalized.recordingUrl ?? null,
+      voicemailUrl: normalized.voicemailUrl ?? null
+    });
     res.json(call ?? { ok: true, ignored: true });
   } catch (error) {
     next(error);

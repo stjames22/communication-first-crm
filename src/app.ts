@@ -8,9 +8,9 @@ import { ZodError } from "zod";
 
 import { adminV2Router } from "./routes/admin_v2";
 import { authV2Router } from "./routes/auth_v2";
-import { callsV2Router, callWebhooksRouter } from "./routes/calls_v2";
+import { callsV2Router, callWebhooksRouter, providerCallWebhooksRouter } from "./routes/calls_v2";
 import { contactsRouter, tasksRouter } from "./routes/crm";
-import { conversationsV2Router, smsWebhooksRouter } from "./routes/communications";
+import { conversationsV2Router, providerSmsWebhooksRouter, smsWebhooksRouter } from "./routes/communications";
 import { dashboardV2Router } from "./routes/dashboard_v2";
 import { devRouter } from "./routes/dev";
 import { externalReferencesRouter } from "./routes/external_references";
@@ -29,6 +29,8 @@ export function createApp() {
   // from internal record IDs and normalize them in the service layer.
   app.use("/webhooks/sms", express.urlencoded({ extended: false }), express.json(), smsWebhooksRouter);
   app.use("/webhooks/calls", express.urlencoded({ extended: false }), express.json(), callWebhooksRouter);
+  app.use("/webhooks/:provider/sms", express.urlencoded({ extended: false }), express.json(), providerSmsWebhooksRouter);
+  app.use("/webhooks/:provider/calls", express.urlencoded({ extended: false }), express.json(), providerCallWebhooksRouter);
 
   app.use(express.json());
   app.use(express.static(publicDir));
@@ -57,6 +59,8 @@ export function createApp() {
 
   app.use("/api/webhooks/sms", smsWebhooksRouter);
   app.use("/api/webhooks/calls", callWebhooksRouter);
+  app.use("/api/webhooks/:provider/sms", providerSmsWebhooksRouter);
+  app.use("/api/webhooks/:provider/calls", providerCallWebhooksRouter);
   app.use("/api/dev", devRouter);
 
   app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {

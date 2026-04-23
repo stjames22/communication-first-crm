@@ -4,6 +4,7 @@ import { createActivity } from "./activity_service";
 import { ensureConversation } from "./conversation_service";
 import { findOrCreateLeadShellByPhone } from "./contact_service";
 import { startProviderOutboundCall } from "./integration_service";
+import type { SupportedProviderName } from "./message_provider";
 
 export async function listCalls() {
   const result = await query(
@@ -21,22 +22,28 @@ export async function listCalls() {
 export async function logInboundCall(input: {
   fromNumber: string;
   toNumber: string;
+  providerName?: SupportedProviderName | null;
   providerCallId?: string | null;
+  providerConversationId?: string | null;
   status?: string | null;
 }) {
   const contact = await findOrCreateLeadShellByPhone(input.fromNumber, "inbound_call");
   const conversation = await ensureConversation(contact.id, contact.assigned_user_id, "phone");
   const result = await query(
     `INSERT INTO calls
-     (contact_id, conversation_id, provider_call_id, direction, status, from_number, to_number, assigned_user_id)
-     VALUES ($1, $2, $3, 'inbound', COALESCE($4, 'ringing'), $5, $6, $7)
+     (contact_id, conversation_id, provider_name, provider_call_id, provider_conversation_id, direction, status, from_number, to_number, assigned_user_id)
+     VALUES ($1, $2, $3, $4, $5, 'inbound', COALESCE($6, 'ringing'), $7, $8, $9)
      ON CONFLICT (provider_call_id) DO UPDATE
-       SET status = EXCLUDED.status
+       SET status = EXCLUDED.status,
+           provider_name = COALESCE(EXCLUDED.provider_name, calls.provider_name),
+           provider_conversation_id = COALESCE(EXCLUDED.provider_conversation_id, calls.provider_conversation_id)
      RETURNING *`,
     [
       contact.id,
       conversation.id,
+      input.providerName ?? null,
       input.providerCallId ?? null,
+      input.providerConversationId ?? null,
       input.status ?? null,
       normalizePhone(input.fromNumber),
       normalizePhone(input.toNumber),
@@ -53,7 +60,11 @@ export async function logInboundCall(input: {
     title: call.status === "missed" ? "Missed call" : "Inbound call logged",
     body: `Inbound call from ${call.from_number}.`,
     actorUserId: call.assigned_user_id,
-    metadata: { providerCallId: input.providerCallId ?? null }
+    metadata: {
+      providerName: input.providerName ?? null,
+      providerCallId: input.providerCallId ?? null,
+      providerConversationId: input.providerConversationId ?? null
+    }
   });
 
   // TODO(automation): missed call -> create follow-up task.
@@ -78,13 +89,15 @@ export async function startOutboundCall(input: {
   const conversation = await ensureConversation(contact.id, input.assignedUserId ?? contact.assigned_user_id, "phone");
   const result = await query(
     `INSERT INTO calls
-     (contact_id, conversation_id, provider_call_id, direction, status, from_number, to_number, assigned_user_id)
-     VALUES ($1, $2, $3, 'outbound', $4, 'staff', $5, $6)
+     (contact_id, conversation_id, provider_name, provider_call_id, provider_conversation_id, direction, status, from_number, to_number, assigned_user_id)
+     VALUES ($1, $2, $3, $4, $5, 'outbound', $6, 'staff', $7, $8)
      RETURNING *`,
     [
       contact.id,
       conversation.id,
+      providerResult.provider,
       providerResult.providerCallId,
+      providerResult.providerConversationId ?? null,
       providerResult.status,
       toNumber,
       input.assignedUserId ?? contact.assigned_user_id ?? null
@@ -110,7 +123,9 @@ export async function startOutboundCall(input: {
 }
 
 export async function updateCallStatus(input: {
+  providerName?: SupportedProviderName | null;
   providerCallId: string;
+  providerConversationId?: string | null;
   status?: string | null;
   durationSeconds?: number | null;
   recordingUrl?: string | null;
@@ -118,19 +133,23 @@ export async function updateCallStatus(input: {
 }) {
   const result = await query(
     `UPDATE calls
-     SET status = COALESCE($2, status),
-         duration_seconds = COALESCE($3, duration_seconds),
-         recording_url = COALESCE($4, recording_url),
-         voicemail_url = COALESCE($5, voicemail_url),
-         ended_at = CASE WHEN $2 IN ('completed', 'missed', 'failed', 'busy', 'no-answer') THEN NOW() ELSE ended_at END
+     SET provider_name = COALESCE($2, provider_name),
+         status = COALESCE($3, status),
+         duration_seconds = COALESCE($4, duration_seconds),
+         recording_url = COALESCE($5, recording_url),
+         voicemail_url = COALESCE($6, voicemail_url),
+         provider_conversation_id = COALESCE($7, provider_conversation_id),
+         ended_at = CASE WHEN $3 IN ('completed', 'missed', 'failed', 'busy', 'no-answer') THEN NOW() ELSE ended_at END
      WHERE provider_call_id = $1
      RETURNING *`,
     [
       input.providerCallId,
+      input.providerName ?? null,
       input.status ?? null,
       input.durationSeconds ?? null,
       input.recordingUrl ?? null,
-      input.voicemailUrl ?? null
+      input.voicemailUrl ?? null,
+      input.providerConversationId ?? null
     ]
   );
 
@@ -144,7 +163,10 @@ export async function updateCallStatus(input: {
       title: input.status === "missed" ? "Missed call" : "Call status updated",
       body: `Call status is ${call.status}.`,
       actorUserId: call.assigned_user_id,
-      metadata: { providerCallId: input.providerCallId }
+      metadata: {
+        providerName: input.providerName ?? null,
+        providerCallId: input.providerCallId
+      }
     });
   }
 

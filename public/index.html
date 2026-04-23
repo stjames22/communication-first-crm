@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Barkboys CRM Workspace</title>
+    <title>Communication CRM Workspace</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -16,9 +16,9 @@
     <div class="app-shell">
       <aside class="nav">
         <div class="brand">
-          <span class="brand-mark">BB</span>
+          <span class="brand-mark">CF</span>
           <div>
-            <strong>Barkboys</strong>
+            <strong>Communication CRM</strong>
             <small>Staff CRM</small>
           </div>
         </div>
@@ -36,6 +36,7 @@
           <div>
             <p class="eyebrow">Communication-first CRM</p>
             <h1 id="view-title">Dashboard</h1>
+            <div class="app-warning hidden" id="auth-warning"></div>
           </div>
           <div class="topbar-actions">
             <span class="health" id="health">Checking API</span>
@@ -86,6 +87,61 @@
         </section>
 
         <section class="view" id="contact-view">
+          <section class="panel contact-entry-panel">
+            <div class="panel-heading">
+              <h2>New Customer / Site</h2>
+              <span>Check duplicates before creating a new record</span>
+            </div>
+            <form id="contact-create-form" class="contact-create-form">
+              <div class="contact-create-grid">
+                <label>
+                  Display Name
+                  <input name="displayName" placeholder="Taylor Morgan" />
+                </label>
+                <label>
+                  Mobile Phone
+                  <input name="mobilePhone" placeholder="(503) 555-0141" />
+                </label>
+                <label>
+                  First Name
+                  <input name="firstName" placeholder="Taylor" />
+                </label>
+                <label>
+                  Last Name
+                  <input name="lastName" placeholder="Morgan" />
+                </label>
+                <label>
+                  Secondary Phone
+                  <input name="secondaryPhone" placeholder="Optional alternate number" />
+                </label>
+                <label>
+                  Email
+                  <input name="email" type="email" placeholder="customer@example.com" />
+                </label>
+                <label class="contact-create-wide">
+                  Address / Service Site
+                  <input name="addressLine1" placeholder="2217 SE Alder St" />
+                </label>
+                <label>
+                  City
+                  <input name="city" placeholder="Portland" />
+                </label>
+                <label>
+                  State
+                  <input name="state" placeholder="OR" />
+                </label>
+                <label>
+                  ZIP
+                  <input name="zip" placeholder="97214" />
+                </label>
+              </div>
+              <div id="duplicate-search-result"></div>
+              <div class="action-row">
+                <button class="primary" type="submit">Create Contact + Site</button>
+              </div>
+            </form>
+          </section>
+
           <div class="record-layout">
             <section class="panel record-main">
               <div class="record-header" id="contact-header"></div>
@@ -126,8 +182,8 @@
                 </fieldset>
                 <fieldset>
                   <legend>Quote details</legend>
-                  <input name="title" value="Barkboys mulch and cleanup quote" />
-                  <textarea name="notes" rows="3">Manual delivery override preserved for Barkboys quote review.</textarea>
+                  <input name="title" value="Landscape mulch and cleanup quote" />
+                  <textarea name="notes" rows="3">Manual delivery override preserved for quote review.</textarea>
                 </fieldset>
                 <fieldset>
                   <legend>Pricing, adjustments, delivery</legend>
@@ -172,6 +228,9 @@
         </section>
 
         <section class="view" id="admin-view">
+          <div class="app-warning admin-warning">
+            Admin and provider settings are demo-only in v1. Scaffold auth is not production security.
+          </div>
           <div class="admin-grid">
             <section class="panel">
               <div class="panel-heading"><h2>User Roles</h2><span>Staff access</span></div>

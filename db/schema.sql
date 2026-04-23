@@ -95,7 +95,9 @@ CREATE TABLE IF NOT EXISTS messages (
   contact_id UUID NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
   direction TEXT NOT NULL CHECK (direction IN ('inbound', 'outbound')),
   channel TEXT NOT NULL DEFAULT 'sms',
+  provider_name TEXT,
   provider_message_id TEXT UNIQUE,
+  provider_conversation_id TEXT,
   body TEXT NOT NULL,
   media_count INTEGER NOT NULL DEFAULT 0,
   delivery_status TEXT NOT NULL DEFAULT 'queued',
@@ -103,11 +105,16 @@ CREATE TABLE IF NOT EXISTS messages (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS provider_name TEXT;
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS provider_conversation_id TEXT;
+
 CREATE TABLE IF NOT EXISTS calls (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   contact_id UUID NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
   conversation_id UUID REFERENCES conversations(id) ON DELETE SET NULL,
+  provider_name TEXT,
   provider_call_id TEXT UNIQUE,
+  provider_conversation_id TEXT,
   direction TEXT NOT NULL CHECK (direction IN ('inbound', 'outbound')),
   status TEXT NOT NULL DEFAULT 'logged',
   from_number TEXT NOT NULL,
@@ -121,6 +128,9 @@ CREATE TABLE IF NOT EXISTS calls (
   disposition TEXT,
   notes TEXT
 );
+
+ALTER TABLE calls ADD COLUMN IF NOT EXISTS provider_name TEXT;
+ALTER TABLE calls ADD COLUMN IF NOT EXISTS provider_conversation_id TEXT;
 
 CREATE TABLE IF NOT EXISTS quotes (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -287,7 +297,9 @@ CREATE INDEX IF NOT EXISTS idx_service_sites_contact ON service_sites(contact_id
 CREATE INDEX IF NOT EXISTS idx_conversations_contact_last_message ON conversations(contact_id, last_message_at DESC);
 CREATE INDEX IF NOT EXISTS idx_messages_conversation_created ON messages(conversation_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_messages_contact_created ON messages(contact_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_messages_provider_lookup ON messages(provider_name, provider_message_id);
 CREATE INDEX IF NOT EXISTS idx_calls_contact_started ON calls(contact_id, started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_calls_provider_lookup ON calls(provider_name, provider_call_id);
 CREATE INDEX IF NOT EXISTS idx_quotes_contact_status ON quotes(contact_id, status);
 CREATE INDEX IF NOT EXISTS idx_quote_versions_quote_created ON quote_versions(quote_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_activities_contact_created ON activities(contact_id, created_at DESC);

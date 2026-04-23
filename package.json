@@ -8,7 +8,9 @@
     "dev:run": "tsx src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
-    "db:setup": "node scripts/setupDb.js"
+    "db:setup": "node scripts/setupDb.js",
+    "db:seed": "curl -fsS -X POST http://127.0.0.1:3000/api/dev/seed-demo",
+    "test:workflow": "tsx scripts/workflow-smoke-test.ts"
   },
   "dependencies": {
     "cors": "^2.8.5",
