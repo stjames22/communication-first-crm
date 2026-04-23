@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Barkboys CRM Workspace</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="nav">
+        <div class="brand">
+          <span class="brand-mark">BB</span>
+          <div>
+            <strong>Barkboys</strong>
+            <small>Staff CRM</small>
+          </div>
+        </div>
+        <button class="nav-item active" data-view="dashboard" type="button">Dashboard</button>
+        <button class="nav-item" data-view="inbox" type="button">Inbox</button>
+        <button class="nav-item" data-view="contact" type="button">Contacts</button>
+        <button class="nav-item" data-view="quote" type="button">Quotes</button>
+        <button class="nav-item" data-view="calls" type="button">Calls</button>
+        <button class="nav-item" data-view="admin" type="button">Admin</button>
+        <button class="seed-button" id="seed-demo" type="button">Load Seed Data</button>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Communication-first CRM</p>
+            <h1 id="view-title">Dashboard</h1>
+          </div>
+          <div class="topbar-actions">
+            <span class="health" id="health">Checking API</span>
+            <button class="primary" id="quick-quote" type="button">Create Quote</button>
+          </div>
+        </header>
+
+        <section class="view active" id="dashboard-view">
+          <div class="metric-grid" id="metrics"></div>
+          <div class="two-column">
+            <section class="panel">
+              <div class="panel-heading">
+                <h2>Recent Activity</h2>
+                <span>Everything important lands here</span>
+              </div>
+              <div class="timeline" id="dashboard-activity"></div>
+            </section>
+            <section class="panel">
+              <div class="panel-heading">
+                <h2>Work Queue</h2>
+                <span>What staff should do next</span>
+              </div>
+              <div id="dashboard-queue" class="list"></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="inbox-view">
+          <div class="workspace-grid">
+            <aside class="panel conversation-pane">
+              <div class="panel-heading">
+                <h2>Shared Inbox</h2>
+                <span>SMS conversations</span>
+              </div>
+              <input class="search" id="conversation-search" placeholder="Search conversations" />
+              <div class="conversation-list" id="conversation-list"></div>
+            </aside>
+            <section class="panel thread-pane">
+              <div class="thread-header" id="thread-header"></div>
+              <div class="thread" id="thread"></div>
+              <form class="composer" id="message-form">
+                <input name="body" placeholder="Text back without leaving the contact workflow" />
+                <button class="primary" type="submit">Send</button>
+              </form>
+            </section>
+            <aside class="panel summary-pane" id="inbox-summary"></aside>
+          </div>
+        </section>
+
+        <section class="view" id="contact-view">
+          <div class="record-layout">
+            <section class="panel record-main">
+              <div class="record-header" id="contact-header"></div>
+              <div class="tabs" id="contact-tabs">
+                <button class="tab active" data-tab="overview" type="button">Overview</button>
+                <button class="tab" data-tab="conversation" type="button">Conversation</button>
+                <button class="tab" data-tab="calls" type="button">Calls</button>
+                <button class="tab" data-tab="quotes" type="button">Quotes</button>
+                <button class="tab" data-tab="sites" type="button">Sites</button>
+                <button class="tab" data-tab="notes" type="button">Notes</button>
+                <button class="tab" data-tab="tasks" type="button">Tasks</button>
+                <button class="tab" data-tab="attachments" type="button">Attachments</button>
+              </div>
+              <div id="contact-tab-content"></div>
+            </section>
+            <aside class="panel">
+              <div class="panel-heading">
+                <h2>Activity Timeline</h2>
+                <span>Contact-wide history</span>
+              </div>
+              <div class="timeline" id="contact-timeline"></div>
+            </aside>
+          </div>
+        </section>
+
+        <section class="view" id="quote-view">
+          <div class="quote-layout">
+            <section class="panel quote-workspace">
+              <div class="panel-heading">
+                <h2>Quote Workspace</h2>
+                <span>Customer, site, pricing, review, send</span>
+              </div>
+              <form id="quote-form" class="quote-form">
+                <fieldset>
+                  <legend>Customer and site</legend>
+                  <select name="contactId" id="quote-contact"></select>
+                  <select name="serviceSiteId" id="quote-site"></select>
+                </fieldset>
+                <fieldset>
+                  <legend>Quote details</legend>
+                  <input name="title" value="Barkboys mulch and cleanup quote" />
+                  <textarea name="notes" rows="3">Manual delivery override preserved for Barkboys quote review.</textarea>
+                </fieldset>
+                <fieldset>
+                  <legend>Pricing, adjustments, delivery</legend>
+                  <div id="line-items" class="line-items"></div>
+                  <div class="pricing-row">
+                    <label>Delivery <input name="deliveryTotal" type="number" value="95" /></label>
+                    <label>Tax <input name="taxTotal" type="number" value="0" /></label>
+                  </div>
+                </fieldset>
+                <fieldset>
+                  <legend>Review</legend>
+                  <div id="quote-review" class="quote-review"></div>
+                </fieldset>
+                <div class="action-row">
+                  <button class="primary" data-quote-action="save" type="submit">Save Draft</button>
+                  <button data-quote-action="version" type="button">Save New Version</button>
+                  <button data-quote-action="sms" type="button">Send SMS</button>
+                  <button data-quote-action="email" type="button">Send Email</button>
+                  <button data-quote-action="pdf" type="button">Open PDF</button>
+                  <button data-quote-action="duplicate" type="button">Duplicate</button>
+                  <button data-quote-action="accept" type="button">Mark Accepted</button>
+                  <button data-quote-action="decline" type="button">Mark Declined</button>
+                </div>
+              </form>
+            </section>
+            <aside class="panel" id="quote-summary"></aside>
+          </div>
+        </section>
+
+        <section class="view" id="calls-view">
+          <div class="calls-layout">
+            <section class="panel">
+              <div class="panel-heading">
+                <h2>Calls</h2>
+                <span>Recent, missed, notes, dispositions</span>
+              </div>
+              <div class="active-call">Active call placeholder: click-to-call will connect through the provider adapter.</div>
+              <div id="calls-list" class="list"></div>
+            </section>
+            <aside class="panel" id="calls-summary"></aside>
+          </div>
+        </section>
+
+        <section class="view" id="admin-view">
+          <div class="admin-grid">
+            <section class="panel">
+              <div class="panel-heading"><h2>User Roles</h2><span>Staff access</span></div>
+              <div id="admin-users" class="list"></div>
+            </section>
+            <section class="panel">
+              <div class="panel-heading"><h2>Templates</h2><span>SMS and email snippets</span></div>
+              <div id="admin-templates" class="list"></div>
+            </section>
+            <section class="panel">
+              <div class="panel-heading"><h2>Integration Settings</h2><span>Twilio and RingCentral ready</span></div>
+              <div id="admin-integrations" class="list"></div>
+            </section>
+            <section class="panel">
+              <div class="panel-heading"><h2>Quote Defaults</h2><span>Pricing defaults</span></div>
+              <div id="admin-quote-defaults" class="list"></div>
+            </section>
+            <section class="panel">
+              <div class="panel-heading"><h2>Phone Routing</h2><span>Inbound rules</span></div>
+              <div id="admin-routing" class="list"></div>
+            </section>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <div class="toast hidden" id="toast"></div>
+    <script src="/app.js" defer></script>
+  </body>
+</html>
