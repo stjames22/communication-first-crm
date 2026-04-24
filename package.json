@@ -12,7 +12,8 @@
     "db:seed": "curl -fsS -X POST http://127.0.0.1:3000/api/dev/seed-demo",
     "samples:api": "tsx scripts/sample-api-requests.ts",
     "test:workflow": "tsx scripts/workflow-smoke-test.ts",
-    "test:domain": "tsx scripts/domain-regression-test.ts"
+    "test:domain": "tsx scripts/domain-regression-test.ts",
+    "test:seed": "tsx scripts/seed-regression-test.ts"
   },
   "dependencies": {
     "cors": "^2.8.5",

@@ -654,7 +654,7 @@ function switchView(view) {
 async function handleSeedDemo() {
   try {
     await fetchJson("/api/dev/seed-demo", { method: "POST" });
-    notify("Seed data loaded.");
+    notify("Demo data loaded. Try Inbox, Contacts, Quotes, and Calls.");
     state.offline = false;
     await loadWorkspace();
   } catch (error) {
