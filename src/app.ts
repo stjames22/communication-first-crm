@@ -16,6 +16,7 @@ import { devRouter } from "./routes/dev";
 import { externalReferencesRouter } from "./routes/external_references";
 import { healthRouter } from "./routes/health";
 import { quotesV2Router } from "./routes/quotes_v2";
+import { requireAppPassword } from "./middleware/app_password_auth";
 
 export function createApp() {
   const app = express();
@@ -33,11 +34,15 @@ export function createApp() {
   app.use("/webhooks/:provider/calls", express.urlencoded({ extended: false }), express.json(), providerCallWebhooksRouter);
 
   app.use(express.json());
-  app.use(express.static(publicDir));
 
   app.use("/health", healthRouter);
 
   app.use("/auth", authV2Router);
+  app.use("/api/auth", authV2Router);
+
+  app.use(requireAppPassword);
+  app.use(express.static(publicDir));
+
   app.use("/dashboard", dashboardV2Router);
   app.use("/contacts", contactsRouter);
   app.use("/tasks", tasksRouter);
@@ -47,7 +52,6 @@ export function createApp() {
   app.use("/external-references", externalReferencesRouter);
   app.use("/settings", adminV2Router);
 
-  app.use("/api/auth", authV2Router);
   app.use("/api/dashboard", dashboardV2Router);
   app.use("/api/contacts", contactsRouter);
   app.use("/api/tasks", tasksRouter);

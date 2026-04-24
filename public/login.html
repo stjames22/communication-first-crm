@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Communication CRM Sign In</title>
+    <link rel="stylesheet" href="/login.css" />
+  </head>
+  <body>
+    <main class="login-shell">
+      <section class="login-panel">
+        <div class="brand">
+          <span class="brand-mark">CF</span>
+          <div>
+            <strong>Communication CRM</strong>
+            <small>Reviewer access</small>
+          </div>
+        </div>
+        <h1>Enter the shared app password</h1>
+        <p>This protects the demo workspace while it is being reviewed.</p>
+        <form id="login-form">
+          <label for="password">Password</label>
+          <input id="password" name="password" type="password" autocomplete="current-password" autofocus required />
+          <button type="submit">Open CRM</button>
+          <div class="error" id="login-error" role="alert"></div>
+        </form>
+      </section>
+    </main>
+    <script src="/login.js"></script>
+  </body>
+</html>
