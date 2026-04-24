@@ -46,6 +46,13 @@
 
         <section class="view active" id="dashboard-view">
           <div class="metric-grid" id="metrics"></div>
+          <section class="panel followup-panel">
+            <div class="panel-heading">
+              <h2>Quotes/Proposals Awaiting Follow-Up</h2>
+              <span>Pending customer responses</span>
+            </div>
+            <div class="quote-followup-list" id="quote-followup-list"></div>
+          </section>
           <div class="two-column">
             <section class="panel">
               <div class="panel-heading">
@@ -78,6 +85,9 @@
               <div class="thread-header" id="thread-header"></div>
               <div class="thread" id="thread"></div>
               <form class="composer" id="message-form">
+                <select id="message-template" aria-label="Message template">
+                  <option value="">Template</option>
+                </select>
                 <input name="body" placeholder="Text back without leaving the contact workflow" />
                 <button class="primary" type="submit">Send</button>
               </form>
@@ -120,15 +130,15 @@
                 </label>
                 <label class="contact-create-wide">
                   Address / Service Site
-                  <input name="addressLine1" placeholder="2217 SE Alder St" />
+                  <input name="addressLine1" placeholder="100 Example Ave" />
                 </label>
                 <label>
                   City
-                  <input name="city" placeholder="Portland" />
+                  <input name="city" placeholder="Sample City" />
                 </label>
                 <label>
                   State
-                  <input name="state" placeholder="OR" />
+                  <input name="state" placeholder="ST" />
                 </label>
                 <label>
                   ZIP
@@ -182,8 +192,8 @@
                 </fieldset>
                 <fieldset>
                   <legend>Quote details</legend>
-                  <input name="title" value="Landscape mulch and cleanup quote" />
-                  <textarea name="notes" rows="3">Manual delivery override preserved for quote review.</textarea>
+                  <input name="title" value="Standard service proposal" />
+                  <textarea name="notes" rows="3">Manual adjustment preserved for quote review.</textarea>
                 </fieldset>
                 <fieldset>
                   <legend>Pricing, adjustments, delivery</legend>
@@ -206,6 +216,7 @@
                   <button data-quote-action="duplicate" type="button">Duplicate</button>
                   <button data-quote-action="accept" type="button">Mark Accepted</button>
                   <button data-quote-action="decline" type="button">Mark Declined</button>
+                  <button data-quote-action="expire" type="button">Mark Expired</button>
                 </div>
               </form>
             </section>

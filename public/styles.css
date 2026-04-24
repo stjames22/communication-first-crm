@@ -212,9 +212,16 @@ textarea {
   color: var(--violet);
 }
 
-.badge.draft {
+.badge.draft,
+.badge.follow_up_due {
   background: #fef3c7;
   color: var(--amber);
+}
+
+.badge.viewed,
+.badge.responded {
+  background: #dbeafe;
+  color: var(--blue);
 }
 
 .view {
@@ -257,6 +264,43 @@ textarea {
   grid-template-columns: repeat(5, minmax(140px, 1fr));
   gap: 12px;
   margin-bottom: 16px;
+}
+
+.followup-panel {
+  margin-bottom: 16px;
+}
+
+.quote-followup-list {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+}
+
+.quote-followup-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  padding: 12px;
+}
+
+.quote-followup-card p {
+  margin: 6px 0;
+}
+
+.quote-followup-card p span,
+.quote-followup-card small {
+  color: var(--muted);
+}
+
+.quote-followup-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .metric {
@@ -471,7 +515,7 @@ textarea {
 
 .composer {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: 160px minmax(0, 1fr) auto;
   gap: 10px;
   padding: 12px;
   border-top: 1px solid var(--line);
@@ -609,6 +653,7 @@ fieldset > * + * {
   .record-layout,
   .quote-layout,
   .calls-layout,
+  .quote-followup-card,
   .two-column,
   .admin-grid,
   .metric-grid {
@@ -634,6 +679,10 @@ fieldset > * + * {
   }
 
   .line-item {
+    grid-template-columns: 1fr;
+  }
+
+  .composer {
     grid-template-columns: 1fr;
   }
 

@@ -55,6 +55,8 @@ const noteSchema = z.object({
 const taskSchema = z.object({
   contactId: z.string().uuid(),
   assignedUserId: z.string().uuid().nullable().optional(),
+  relatedType: z.string().nullable().optional(),
+  relatedId: z.string().uuid().nullable().optional(),
   title: z.string().min(1),
   dueAt: z.string().nullable().optional(),
   status: z.string().nullable().optional(),

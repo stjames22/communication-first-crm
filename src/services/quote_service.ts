@@ -1,6 +1,22 @@
 import { pool, query } from "../lib/db";
 import { createActivity } from "./activity_service";
+import { ensureConversation } from "./conversation_service";
 import { sendQuoteEmailNotification, sendQuoteSmsNotification } from "./notification_service";
+import { runQuoteAutomationHook } from "./quote_automation_service";
+import { markQuoteFollowUpTasksCompleted } from "./task_service";
+
+export const quoteStatuses = [
+  "draft",
+  "sent",
+  "viewed",
+  "follow_up_due",
+  "responded",
+  "accepted",
+  "declined",
+  "expired"
+] as const;
+
+export type QuoteStatus = (typeof quoteStatuses)[number];
 
 export type QuoteLineItemInput = {
   itemType?: string | null;
@@ -24,6 +40,10 @@ export type QuoteInput = {
   lineItems?: QuoteLineItemInput[];
 };
 
+export function isQuoteStatus(value: string): value is QuoteStatus {
+  return quoteStatuses.includes(value as QuoteStatus);
+}
+
 export async function listQuotes() {
   const result = await query(
     `SELECT q.*, c.display_name, c.mobile_phone, s.label AS site_label, s.address_line_1
@@ -38,6 +58,10 @@ export async function listQuotes() {
 }
 
 export async function createQuote(input: QuoteInput) {
+  if (input.status && !isQuoteStatus(input.status)) {
+    throw new Error(`Unsupported quote status: ${input.status}`);
+  }
+
   const client = await pool.connect();
 
   try {
@@ -118,8 +142,8 @@ export async function createQuote(input: QuoteInput) {
       contactId: quote.contact_id,
       relatedType: "quote",
       relatedId: quote.id,
-      activityType: "quote.created",
-      title: "Quote created",
+      activityType: "quote_created",
+      title: "Quote/proposal created",
       body: `${quote.quote_number} was created for ${quote.title}.`,
       actorUserId: input.createdByUserId ?? null,
       metadata: { grandTotal: totals.grandTotal, version: 1 }
@@ -137,7 +161,7 @@ export async function createQuote(input: QuoteInput) {
 export async function getQuote(quoteId: string) {
   const quote = (
     await query(
-      `SELECT q.*, c.display_name, c.mobile_phone, c.email, s.label AS site_label,
+      `SELECT q.*, c.display_name, c.mobile_phone, c.email, c.assigned_user_id, s.label AS site_label,
               s.address_line_1, s.city, s.state, s.zip
        FROM quotes q
        JOIN contacts c ON c.id = q.contact_id
@@ -170,6 +194,10 @@ export async function getQuote(quoteId: string) {
 }
 
 export async function updateQuote(quoteId: string, input: { title?: string; status?: string }) {
+  if (input.status && !isQuoteStatus(input.status)) {
+    throw new Error(`Unsupported quote status: ${input.status}`);
+  }
+
   const result = await query(
     `UPDATE quotes
      SET title = COALESCE($2, title),
@@ -269,8 +297,8 @@ export async function createQuoteVersion(
       contactId: quote.contact_id,
       relatedType: "quote",
       relatedId: quote.id,
-      activityType: "quote.revised",
-      title: "Quote version saved",
+      activityType: "quote_revised",
+      title: "Quote/proposal revised",
       body: `${quote.quote_number} version ${versionNumber} was saved.`,
       actorUserId: input.createdByUserId ?? null,
       metadata: { version: versionNumber, grandTotal: totals.grandTotal }
@@ -297,20 +325,73 @@ export async function sendQuoteBySms(quoteId: string, actorUserId?: string | nul
     quoteNumber: quote.quote_number,
     quoteUrl: `/quotes/${quote.id}/pdf`
   });
+  const conversation = await ensureConversation(quote.contact_id, actorUserId ?? quote.created_by_user_id, "sms");
+  const message = (
+    await query(
+      `INSERT INTO messages
+       (conversation_id, contact_id, direction, channel, provider_name, provider_message_id, provider_conversation_id, body, delivery_status, sent_by_user_id)
+       VALUES ($1, $2, 'outbound', 'sms', $3, $4, $5, $6, $7, $8)
+       RETURNING *`,
+      [
+        conversation.id,
+        quote.contact_id,
+        result.provider,
+        result.providerMessageId,
+        result.providerConversationId ?? null,
+        result.body,
+        result.deliveryStatus,
+        actorUserId ?? null
+      ]
+    )
+  ).rows[0];
 
-  await query("UPDATE quotes SET status = 'sent', sent_at = COALESCE(sent_at, NOW()) WHERE id = $1", [quoteId]);
+  await query(
+    `UPDATE conversations
+     SET last_message_at = $2,
+         unread_count = 0,
+         status = 'open'
+     WHERE id = $1`,
+    [conversation.id, message.created_at]
+  );
+
+  const sentQuote = (
+    await query(
+      `UPDATE quotes
+       SET status = 'sent',
+           sent_at = COALESCE(sent_at, NOW()),
+           updated_at = NOW()
+       WHERE id = $1
+       RETURNING *`,
+      [quoteId]
+    )
+  ).rows[0];
+  await createActivity({
+    contactId: quote.contact_id,
+    relatedType: "message",
+    relatedId: message.id,
+    activityType: "message.outbound",
+    title: "Outbound text sent",
+    body: result.body,
+    actorUserId: actorUserId ?? null,
+    metadata: {
+      provider: result.provider,
+      providerMessageId: result.providerMessageId,
+      providerConversationId: result.providerConversationId ?? null,
+      quoteId: quote.id
+    }
+  });
   await createActivity({
     contactId: quote.contact_id,
     relatedType: "quote",
     relatedId: quote.id,
-    activityType: "quote.sent.sms",
-    title: "Quote sent by SMS",
+    activityType: "quote_sent",
+    title: "Quote/proposal sent",
     body: `${quote.quote_number} was sent by text.`,
     actorUserId: actorUserId ?? null,
-    metadata: result
+    metadata: { ...result, channel: "sms" }
   });
 
-  // TODO(automation): quote sent -> create follow-up reminder.
+  await runQuoteAutomationHook("quote_sent", { ...sentQuote, assigned_user_id: quote.assigned_user_id }, actorUserId);
   return result;
 }
 
@@ -327,18 +408,29 @@ export async function sendQuoteByEmail(quoteId: string, actorUserId?: string | n
     quoteUrl: `/quotes/${quote.id}/pdf`
   });
 
-  await query("UPDATE quotes SET status = 'sent', sent_at = COALESCE(sent_at, NOW()) WHERE id = $1", [quoteId]);
+  const sentQuote = (
+    await query(
+      `UPDATE quotes
+       SET status = 'sent',
+           sent_at = COALESCE(sent_at, NOW()),
+           updated_at = NOW()
+       WHERE id = $1
+       RETURNING *`,
+      [quoteId]
+    )
+  ).rows[0];
   await createActivity({
     contactId: quote.contact_id,
     relatedType: "quote",
     relatedId: quote.id,
-    activityType: "quote.sent.email",
-    title: "Quote sent by email",
+    activityType: "quote_sent",
+    title: "Quote/proposal sent",
     body: `${quote.quote_number} was sent by email.`,
     actorUserId: actorUserId ?? null,
-    metadata: result
+    metadata: { ...result, channel: "email" }
   });
 
+  await runQuoteAutomationHook("quote_sent", { ...sentQuote, assigned_user_id: quote.assigned_user_id }, actorUserId);
   return result;
 }
 
@@ -346,7 +438,8 @@ export async function markQuoteStatus(quoteId: string, status: "accepted" | "dec
   const result = await query(
     `UPDATE quotes
      SET status = $2,
-         accepted_at = CASE WHEN $2 = 'accepted' THEN NOW() ELSE accepted_at END
+         accepted_at = CASE WHEN $2 = 'accepted' THEN NOW() ELSE accepted_at END,
+         updated_at = NOW()
      WHERE id = $1
      RETURNING *`,
     [quoteId, status]
@@ -361,11 +454,106 @@ export async function markQuoteStatus(quoteId: string, status: "accepted" | "dec
     contactId: quote.contact_id,
     relatedType: "quote",
     relatedId: quote.id,
-    activityType: `quote.${status}`,
-    title: status === "accepted" ? "Quote accepted" : "Quote declined",
+    activityType: status === "accepted" ? "quote_accepted" : "quote_declined",
+    title: status === "accepted" ? "Quote/proposal accepted" : "Quote/proposal declined",
     body: `${quote.quote_number} was marked ${status}.`,
     actorUserId: actorUserId ?? null,
     metadata: { status }
+  });
+
+  await markQuoteFollowUpTasksCompleted({ quoteId: quote.id, actorUserId });
+  await runQuoteAutomationHook(status === "accepted" ? "quote_accepted" : "quote_declined", quote, actorUserId);
+  return quote;
+}
+
+export async function markQuoteViewed(quoteId: string, actorUserId?: string | null) {
+  const result = await query(
+    `UPDATE quotes
+     SET status = CASE WHEN status IN ('draft', 'responded', 'accepted', 'declined', 'expired') THEN status ELSE 'viewed' END,
+         updated_at = NOW()
+     WHERE id = $1
+     RETURNING *`,
+    [quoteId]
+  );
+
+  const quote = result.rows[0];
+  if (!quote) {
+    return null;
+  }
+
+  await createActivity({
+    contactId: quote.contact_id,
+    relatedType: "quote",
+    relatedId: quote.id,
+    activityType: "quote_viewed",
+    title: "Quote/proposal viewed",
+    body: `${quote.quote_number} was viewed.`,
+    actorUserId: actorUserId ?? null,
+    metadata: { status: quote.status }
+  });
+
+  if (!["accepted", "declined", "expired", "responded"].includes(quote.status)) {
+    await runQuoteAutomationHook("quote_viewed_no_response", quote, actorUserId);
+  }
+
+  return quote;
+}
+
+export async function markQuoteFollowedUp(quoteId: string, actorUserId?: string | null) {
+  const result = await query(
+    `UPDATE quotes
+     SET status = CASE WHEN status IN ('accepted', 'declined', 'expired') THEN status ELSE 'responded' END,
+         updated_at = NOW()
+     WHERE id = $1
+     RETURNING *`,
+    [quoteId]
+  );
+
+  const quote = result.rows[0];
+  if (!quote) {
+    return null;
+  }
+
+  await markQuoteFollowUpTasksCompleted({ quoteId: quote.id, actorUserId });
+  await createActivity({
+    contactId: quote.contact_id,
+    relatedType: "quote",
+    relatedId: quote.id,
+    activityType: "quote_followed_up",
+    title: "Quote/proposal followed up",
+    body: `${quote.quote_number} follow-up was completed.`,
+    actorUserId: actorUserId ?? null,
+    metadata: { status: quote.status }
+  });
+
+  return quote;
+}
+
+export async function markQuoteExpired(quoteId: string, actorUserId?: string | null) {
+  const result = await query(
+    `UPDATE quotes
+     SET status = 'expired',
+         updated_at = NOW()
+     WHERE id = $1
+     RETURNING *`,
+    [quoteId]
+  );
+
+  const quote = result.rows[0];
+  if (!quote) {
+    return null;
+  }
+
+  await markQuoteFollowUpTasksCompleted({ quoteId: quote.id, actorUserId });
+  await createActivity({
+    contactId: quote.contact_id,
+    relatedType: "quote",
+    relatedId: quote.id,
+    activityType: "quote_expired",
+    title: "Quote/proposal expired",
+    body: `${quote.quote_number} expired.`,
+    actorUserId: actorUserId ?? null,
+    metadata: { status: "expired" }
   });
 
   return quote;

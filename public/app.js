@@ -26,13 +26,14 @@ const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => Array.from(document.querySelectorAll(selector));
 
 const quoteLineItems = [
-  { name: "Bark mulch installation", quantity: 8, unitPrice: 145, itemType: "service" },
-  { name: "Bed cleanup", quantity: 1, unitPrice: 485, itemType: "service" },
-  { name: "Manual delivery access adjustment", quantity: 1, unitPrice: 200, itemType: "adjustment" }
+  { name: "Initial service package", quantity: 1, unitPrice: 1200, itemType: "service" },
+  { name: "Implementation support", quantity: 4, unitPrice: 125, itemType: "service" },
+  { name: "Manual delivery or handling adjustment", quantity: 1, unitPrice: 200, itemType: "adjustment" }
 ];
 
 document.addEventListener("click", handleDocumentClick);
 $("#message-form").addEventListener("submit", handleSendMessage);
+$("#message-template").addEventListener("change", handleTemplateSelect);
 $("#quote-form").addEventListener("submit", handleSaveQuote);
 $("#quote-contact").addEventListener("change", handleQuoteContactChange);
 $("#conversation-search").addEventListener("input", renderConversations);
@@ -141,6 +142,7 @@ function renderAll() {
   renderAuthWarning();
   renderDashboard();
   renderConversations();
+  renderMessageTemplates();
   renderThread();
   renderContactSummary("#inbox-summary", getActiveContactSummary());
   renderDuplicateSearchResult();
@@ -178,6 +180,7 @@ function renderDashboard() {
     .join("");
 
   renderTimeline("#dashboard-activity", state.dashboard?.recentActivity || []);
+  renderQuoteFollowups();
 
   $("#dashboard-queue").innerHTML =
     state.tasks.length === 0
@@ -189,6 +192,39 @@ function renderDashboard() {
               <article class="list-item">
                 <div class="row"><strong>${escapeHtml(task.title)}</strong><span class="badge draft">${escapeHtml(task.priority || "normal")}</span></div>
                 <small>${escapeHtml(task.display_name || "Contact")} ${task.due_at ? "due " + formatDate(task.due_at) : "no due date"}</small>
+              </article>`
+          )
+          .join("");
+}
+
+function renderQuoteFollowups() {
+  const quotes = state.dashboard?.quotesAwaitingFollowUp || [];
+  $("#quote-followup-list").innerHTML =
+    quotes.length === 0
+      ? `<div class="empty">No quote or proposal follow-ups waiting.</div>`
+      : quotes
+          .map(
+            (quote) => `
+              <article class="quote-followup-card">
+                <div>
+                  <div class="row">
+                    <strong>${escapeHtml(quote.display_name)}</strong>
+                    ${quoteBadge(quote.status)}
+                  </div>
+                  <p>${escapeHtml(quote.title)} <span>${escapeHtml(quote.quote_number)}</span></p>
+                  <small>
+                    Sent ${quote.sent_at ? formatDate(quote.sent_at) : "not sent"}
+                    ${quote.follow_up_due_at ? "Follow-up due " + formatDate(quote.follow_up_due_at) : ""}
+                    ${quote.assigned_user_name ? "Assigned to " + escapeHtml(quote.assigned_user_name) : "Unassigned"}
+                  </small>
+                </div>
+                <div class="quote-followup-actions">
+                  <button data-quote-followup-action="text" data-contact-id="${escapeAttr(quote.contact_id)}" data-quote-id="${escapeAttr(quote.id)}" type="button">Text</button>
+                  <button data-quote-followup-action="call" data-contact-id="${escapeAttr(quote.contact_id)}" data-quote-id="${escapeAttr(quote.id)}" type="button">Call</button>
+                  <button data-quote-followup-action="email" data-contact-id="${escapeAttr(quote.contact_id)}" data-quote-id="${escapeAttr(quote.id)}" type="button">Email</button>
+                  <button data-quote-followup-action="followed-up" data-contact-id="${escapeAttr(quote.contact_id)}" data-quote-id="${escapeAttr(quote.id)}" type="button">Mark Followed Up</button>
+                  <button data-quote-followup-action="open" data-contact-id="${escapeAttr(quote.contact_id)}" data-quote-id="${escapeAttr(quote.id)}" type="button">Open Quote</button>
+                </div>
               </article>`
           )
           .join("");
@@ -269,14 +305,23 @@ function renderContactSummary(targetSelector, summary) {
       <div class="tags">${(summary.tags || []).map((tag) => `<span class="tag" style="background:${escapeAttr(tag.color || "#64748b")}">${escapeHtml(tag.name)}</span>`).join("")}</div>
       <div class="summary-line"><span>Quote</span><strong>${summary.latest_quote ? `${escapeHtml(summary.latest_quote.quote_number)} ${quoteBadge(summary.latest_quote.status)}` : "No quote"}</strong></div>
       <div class="quick-actions">
-        <button data-action="call" type="button">Call</button>
-        <button data-action="text" type="button">Text</button>
-        <button data-action="note" type="button">Add Note</button>
-        <button data-action="add-task" type="button">Create Task</button>
-        <button data-action="quote" type="button">Create Quote</button>
+        <button data-action="call" data-contact-id="${escapeAttr(summary.id || "")}" type="button">Call</button>
+        <button data-action="text" data-contact-id="${escapeAttr(summary.id || "")}" type="button">Text</button>
+        <button data-action="note" data-contact-id="${escapeAttr(summary.id || "")}" type="button">Add Note</button>
+        <button data-action="add-task" data-contact-id="${escapeAttr(summary.id || "")}" type="button">Create Task</button>
+        <button data-action="quote" data-contact-id="${escapeAttr(summary.id || "")}" type="button">Create Quote</button>
       </div>
     </div>
   `;
+}
+
+function renderMessageTemplates() {
+  const select = $("#message-template");
+  const templates = (state.admin.templates || []).filter((template) => template.is_active !== false);
+  select.innerHTML = [
+    `<option value="">Template</option>`,
+    ...templates.map((template) => `<option value="${escapeAttr(template.id)}">${escapeHtml(template.name)}</option>`)
+  ].join("");
 }
 
 function renderContactRecord() {
@@ -514,6 +559,12 @@ async function handleDocumentClick(event) {
     return;
   }
 
+  const quoteFollowupAction = event.target.closest("[data-quote-followup-action]");
+  if (quoteFollowupAction) {
+    await handleQuoteFollowupAction(quoteFollowupAction.dataset.quoteFollowupAction, quoteFollowupAction.dataset);
+    return;
+  }
+
   const duplicateAction = event.target.closest("[data-duplicate-action]");
   if (duplicateAction) {
     await handleDuplicateAction(duplicateAction.dataset.duplicateAction, duplicateAction.dataset);
@@ -522,7 +573,67 @@ async function handleDocumentClick(event) {
 
   const action = event.target.closest("[data-action]");
   if (action) {
-    await handleQuickAction(action.dataset.action);
+    await handleQuickAction(action.dataset.action, action.dataset.contactId || null);
+  }
+}
+
+async function handleQuoteFollowupAction(action, dataset) {
+  const quoteId = dataset.quoteId;
+  const contactId = dataset.contactId;
+
+  if (action === "open") {
+    state.selectedQuoteId = quoteId;
+    state.selectedContactId = contactId;
+    switchView("quote");
+    renderQuoteWorkspace();
+    return;
+  }
+
+  if (action === "text") {
+    state.selectedContactId = contactId;
+    const conversation = state.conversations.find((item) => item.contact_id === contactId && item.channel_type === "sms");
+    if (conversation) {
+      state.selectedConversationId = conversation.id;
+      await loadSelectedRecords();
+    }
+    switchView("inbox");
+    renderAll();
+    $("#message-form input[name='body']").focus();
+    return;
+  }
+
+  if (action === "call") {
+    await handleQuickAction("call", contactId);
+    return;
+  }
+
+  if (action === "email") {
+    if (state.offline) {
+      notify("Email follow-up would go through notification_service.");
+      return;
+    }
+    await fetchJson(`/api/quotes/${quoteId}/send-email`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({})
+    });
+    await loadWorkspace();
+    notify("Quote/proposal email sent and follow-up task checked.");
+    return;
+  }
+
+  if (action === "followed-up") {
+    if (state.offline) {
+      notify("Quote/proposal follow-up would be marked complete.");
+      return;
+    }
+    await fetchJson(`/api/quotes/${quoteId}/followed-up`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({})
+    });
+    await loadWorkspace();
+    notify("Quote/proposal marked followed up.");
   }
 }
 
@@ -725,13 +836,23 @@ async function handleSendMessage(event) {
   }
 }
 
+function handleTemplateSelect(event) {
+  const template = (state.admin.templates || []).find((item) => item.id === event.target.value);
+  if (!template) {
+    return;
+  }
+
+  $("#message-form input[name='body']").value = template.body;
+  event.target.value = "";
+}
+
 async function handleSaveQuote(event) {
   event.preventDefault();
   await createOrUpdateQuote("save");
 }
 
 async function handleQuoteAction(action) {
-  if (["version", "sms", "email", "pdf", "accept", "decline"].includes(action) && !state.selectedQuoteId) {
+  if (["version", "sms", "email", "pdf", "accept", "decline", "expire"].includes(action) && !state.selectedQuoteId) {
     await createOrUpdateQuote("save");
   }
 
@@ -757,7 +878,8 @@ async function handleQuoteAction(action) {
     sms: "send-sms",
     email: "send-email",
     accept: "accept",
-    decline: "decline"
+    decline: "decline",
+    expire: "expire"
   };
 
   if (!endpointByAction[action] || state.offline) {
@@ -817,27 +939,36 @@ function handleQuoteContactChange() {
   renderQuoteWorkspace();
 }
 
-async function handleQuickAction(action) {
+async function handleQuickAction(action, contactIdOverride = null) {
+  const contactId = contactIdOverride || state.selectedContactId;
+
   if (action === "quote") {
+    if (contactId) {
+      state.selectedContactId = contactId;
+    }
     switchView("quote");
+    renderQuoteWorkspace();
     return;
   }
 
   if (action === "text") {
+    if (contactId) {
+      state.selectedContactId = contactId;
+    }
     switchView("inbox");
     $("#message-form input").focus();
     return;
   }
 
   if (action === "call") {
-    if (state.offline || !state.selectedContactId) {
+    if (state.offline || !contactId) {
       notify("Call would start through integration_service.");
       return;
     }
     await fetchJson("/api/calls/outbound", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ contactId: state.selectedContactId })
+      body: JSON.stringify({ contactId })
     });
     await loadWorkspace();
     notify("Outbound call placeholder logged.");
@@ -845,12 +976,40 @@ async function handleQuickAction(action) {
   }
 
   if (action === "add-task") {
-    notify("Task creation route is ready at POST /tasks.");
+    const title = window.prompt("Task title");
+    if (!title || !contactId) {
+      return;
+    }
+    if (state.offline) {
+      notify("Task would be created and written to the timeline.");
+      return;
+    }
+    await fetchJson("/api/tasks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ contactId, title })
+    });
+    await loadWorkspace();
+    notify("Task created and written to the activity timeline.");
     return;
   }
 
   if (action === "note") {
-    notify("Notes write to the unified activity timeline at POST /contacts/{id}/notes.");
+    const body = window.prompt("Note");
+    if (!body || !contactId) {
+      return;
+    }
+    if (state.offline) {
+      notify("Note would be written to the activity timeline.");
+      return;
+    }
+    await fetchJson(`/api/contacts/${contactId}/notes`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ body })
+    });
+    await loadWorkspace();
+    notify("Note added to the activity timeline.");
   }
 }
 
@@ -990,18 +1149,18 @@ function hydrateOfflineData() {
   const now = new Date().toISOString();
   const site = {
     id: "site-demo",
-    label: "Home",
-    address_line_1: "2217 SE Alder St",
-    city: "Portland",
-    state: "OR",
-    zip: "97214",
-    delivery_zone: "Central"
+    label: "Primary Site",
+    address_line_1: "100 Example Ave",
+    city: "Sample City",
+    state: "ST",
+    zip: "10001",
+    delivery_zone: "Standard"
   };
   const contact = {
     id: "contact-demo",
-    display_name: "Kyle Bennett",
+    display_name: "Jordan Lee",
     mobile_phone: "+15035550141",
-    email: "kyle@example.com",
+    email: "jordan@example.com",
     status: "lead",
     source: "website",
     preferred_contact_method: "sms",
@@ -1018,7 +1177,7 @@ function hydrateOfflineData() {
       display_name: contact.display_name,
       mobile_phone: contact.mobile_phone,
       unread_count: 1,
-      last_message_body: "Please include delivery and a simple edging option.",
+      last_message_body: "Please include delivery timing and an implementation option.",
       sort_at: now
     }
   ];
@@ -1038,7 +1197,7 @@ function hydrateOfflineData() {
       id: "quote-demo",
       contact_id: contact.id,
       quote_number: "QTE-2026-0001",
-      title: "Backyard refresh quote",
+      title: "Standard service proposal",
       status: "draft",
       grand_total: 1940
     }
@@ -1048,7 +1207,7 @@ function hydrateOfflineData() {
       id: "task-demo",
       contact_id: contact.id,
       display_name: contact.display_name,
-      title: "Reply with quote draft",
+      title: "Reply with proposal draft",
       priority: "high",
       due_at: now
     }
@@ -1064,13 +1223,13 @@ function hydrateOfflineData() {
     recentActivity: [
       {
         title: "Inbound text received",
-        body: "Please include delivery and a simple edging option.",
+        body: "Please include delivery timing and an implementation option.",
         activity_type: "message.inbound",
         created_at: now
       },
       {
         title: "Missed call",
-        body: "Missed inbound call from Kyle Bennett.",
+        body: "Missed inbound call from Jordan Lee.",
         activity_type: "call.missed",
         created_at: now
       }
@@ -1098,7 +1257,7 @@ function makeOfflineConversationDetail() {
       {
         id: "m1",
         direction: "inbound",
-        body: "Hi, can you quote mulch and cleanup for my front beds?",
+        body: "Hi, can you send a proposal for the standard service package?",
         delivery_status: "received",
         created_at: new Date(Date.now() - 30 * 60 * 1000).toISOString()
       },
@@ -1112,7 +1271,7 @@ function makeOfflineConversationDetail() {
       {
         id: "m3",
         direction: "inbound",
-        body: "Great. Please include delivery and a simple edging option.",
+        body: "Great. Please include delivery timing and an implementation option.",
         delivery_status: "received",
         created_at: new Date(Date.now() - 12 * 60 * 1000).toISOString()
       }

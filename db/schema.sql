@@ -211,12 +211,17 @@ CREATE TABLE IF NOT EXISTS tasks (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   contact_id UUID NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
   assigned_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+  related_type TEXT,
+  related_id UUID,
   title TEXT NOT NULL,
   due_at TIMESTAMPTZ,
   status TEXT NOT NULL DEFAULT 'open',
   priority TEXT NOT NULL DEFAULT 'normal',
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS related_type TEXT;
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS related_id UUID;
 
 CREATE TABLE IF NOT EXISTS attachments (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

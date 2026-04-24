@@ -44,7 +44,7 @@ export async function searchContactDuplicates(input: {
 }) {
   const phoneKey = normalizePhoneMatchKey(input.phone);
   const nameQuery = normalizeNameQuery(input.name);
-  const addressLine = normalizeAddressPart(input.address);
+  const addressLine = normalizeAddressPart(extractAddressLine(input.address));
   const zip = normalizeZip(input.zip);
 
   const collected = new Map<string, DuplicateMatch>();
@@ -306,7 +306,7 @@ export async function searchContactDuplicates(input: {
     );
 
     const requestedAddressKey = buildAddressMatchKey({
-      addressLine1: input.address,
+      addressLine1: extractAddressLine(input.address),
       city: extractCity(input.address),
       state: extractState(input.address),
       zip: input.zip
@@ -493,4 +493,9 @@ function extractCity(address?: string | null) {
 function extractState(address?: string | null) {
   const parts = String(address ?? "").split(",");
   return parts[2] ?? "";
+}
+
+function extractAddressLine(address?: string | null) {
+  const parts = String(address ?? "").split(",");
+  return parts[0] ?? "";
 }

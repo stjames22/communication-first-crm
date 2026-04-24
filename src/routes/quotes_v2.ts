@@ -6,7 +6,10 @@ import {
   createQuoteVersion,
   getQuote,
   listQuotes,
+  markQuoteExpired,
+  markQuoteFollowedUp,
   markQuoteStatus,
+  markQuoteViewed,
   sendQuoteByEmail,
   sendQuoteBySms,
   updateQuote
@@ -108,8 +111,16 @@ quotesV2Router.post("/:id/versions", async (req, res, next) => {
   }
 });
 
-quotesV2Router.get("/:id/pdf", async (req, res) => {
-  res.json(getQuotePdfHook(req.params.id));
+quotesV2Router.get("/:id/pdf", async (req, res, next) => {
+  try {
+    const hook = await getQuotePdfHook(req.params.id);
+    if (!hook) {
+      return res.status(404).json({ error: "Quote not found" });
+    }
+    res.json(hook);
+  } catch (error) {
+    next(error);
+  }
 });
 
 quotesV2Router.post("/:id/send-sms", async (req, res, next) => {
@@ -155,6 +166,45 @@ quotesV2Router.post("/:id/decline", async (req, res, next) => {
   try {
     const payload = actorSchema.parse(req.body ?? {});
     const quote = await markQuoteStatus(req.params.id, "declined", payload.actorUserId ?? null);
+    if (!quote) {
+      return res.status(404).json({ error: "Quote not found" });
+    }
+    res.json(quote);
+  } catch (error) {
+    next(error);
+  }
+});
+
+quotesV2Router.post("/:id/viewed", async (req, res, next) => {
+  try {
+    const payload = actorSchema.parse(req.body ?? {});
+    const quote = await markQuoteViewed(req.params.id, payload.actorUserId ?? null);
+    if (!quote) {
+      return res.status(404).json({ error: "Quote not found" });
+    }
+    res.json(quote);
+  } catch (error) {
+    next(error);
+  }
+});
+
+quotesV2Router.post("/:id/followed-up", async (req, res, next) => {
+  try {
+    const payload = actorSchema.parse(req.body ?? {});
+    const quote = await markQuoteFollowedUp(req.params.id, payload.actorUserId ?? null);
+    if (!quote) {
+      return res.status(404).json({ error: "Quote not found" });
+    }
+    res.json(quote);
+  } catch (error) {
+    next(error);
+  }
+});
+
+quotesV2Router.post("/:id/expire", async (req, res, next) => {
+  try {
+    const payload = actorSchema.parse(req.body ?? {});
+    const quote = await markQuoteExpired(req.params.id, payload.actorUserId ?? null);
     if (!quote) {
       return res.status(404).json({ error: "Quote not found" });
     }
