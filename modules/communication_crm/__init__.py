@@ -1,4 +1,4 @@
-"""Isolated communication CRM module for BarkBoys."""
+"""Isolated communication CRM module."""
 
 from .models import create_crm_tables
 from .router import router as crm_router

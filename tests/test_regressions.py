@@ -201,6 +201,17 @@ class BarkboysRegressionTests(unittest.TestCase):
             self.assertEqual([item["direction"] for item in second_messages], ["inbound", "outbound"])
             self.assertEqual(second_messages[1]["message"], "Yes, we can help.")
 
+            demo = client.post("/crm/api/dev/seed-demo", json={})
+            self.assertEqual(demo.status_code, 200)
+            self.assertTrue(demo.json()["ok"])
+            demo_conversations = client.get("/crm/api/conversations")
+            self.assertEqual(demo_conversations.status_code, 200)
+            self.assertGreaterEqual(len(demo_conversations.json()), 3)
+            demo_dashboard = client.get("/crm/api/dashboard")
+            self.assertEqual(demo_dashboard.status_code, 200)
+            self.assertTrue(demo_dashboard.json()["followUps"])
+            self.assertTrue(demo_dashboard.json()["quoteActivity"])
+
             matched = client.post(
                 "/api/inbound-message",
                 json={

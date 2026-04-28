@@ -367,6 +367,15 @@ def safe_json(value: Optional[str]) -> dict[str, Any]:
     return parsed if isinstance(parsed, dict) else {}
 
 
+def demo_marker_exists(db: Session, marker: str) -> bool:
+    return (
+        db.query(CrmActivity)
+        .filter(CrmActivity.metadata_json.like(f'%"demo_marker": "{marker}"%'))
+        .first()
+        is not None
+    )
+
+
 def list_contacts(db: Session) -> list[dict[str, Any]]:
     contacts = (
         db.query(CrmContact)
@@ -532,6 +541,20 @@ def dashboard(db: Session) -> dict[str, Any]:
     quote_followups = db.query(CrmQuote).filter(CrmQuote.status.in_(["draft", "sent"])).count()
     tasks_due = db.query(CrmTask).filter(CrmTask.status != "completed").count()
     activity = db.query(CrmActivity).order_by(desc(CrmActivity.created_at)).limit(10).all()
+    followups = (
+        db.query(CrmTask)
+        .filter(CrmTask.status != "completed")
+        .order_by(CrmTask.due_at, desc(CrmTask.created_at))
+        .limit(5)
+        .all()
+    )
+    quote_activity = (
+        db.query(CrmActivity)
+        .filter(CrmActivity.activity_type.like("quote.%"))
+        .order_by(desc(CrmActivity.created_at))
+        .limit(5)
+        .all()
+    )
     return {
         "metrics": {
             "unreadTexts": int(unread_texts),
@@ -541,6 +564,8 @@ def dashboard(db: Session) -> dict[str, Any]:
             "tasksDueToday": tasks_due,
         },
         "recentActivity": [serialize_activity(row) for row in activity],
+        "followUps": [serialize_task(row) for row in followups],
+        "quoteActivity": [serialize_activity(row) for row in quote_activity],
     }
 
 
@@ -585,161 +610,176 @@ def list_external_links(db: Session) -> list[dict[str, Any]]:
 
 
 def seed_demo(db: Session) -> dict[str, Any]:
-    if db.query(CrmContact).count():
-        return {"ok": True, "seeded": False}
+    now = datetime.utcnow()
+    created = 0
+    demo_contacts = [
+        {
+            "marker": "demo-rivera",
+            "name": "Maya Rivera",
+            "phone": "+15035550161",
+            "email": "maya.rivera@example.com",
+            "status": "lead",
+            "source": "website",
+            "site": ("Home", "1842 SE Oak St", "Portland", "OR", "97214", "Central"),
+            "messages": [
+                ("inbound", "Hi, can you help with a front yard cleanup and new mulch?", 90),
+                ("outbound", "Yes. I can start a quote today. Do you prefer text updates?", 84),
+                ("inbound", "Text is best. Afternoon appointments work.", 12),
+            ],
+            "task": "Send cleanup quote with afternoon scheduling options",
+            "note": "Prefers text updates. Afternoon appointments only.",
+        },
+        {
+            "marker": "demo-chen",
+            "name": "Noah Chen",
+            "phone": "+15035550162",
+            "email": "noah.chen@example.com",
+            "status": "quoted",
+            "source": "referral",
+            "site": ("Backyard", "7309 N Willamette Blvd", "Portland", "OR", "97203", "North"),
+            "messages": [
+                ("inbound", "Can you resend the quote for the backyard refresh?", 55),
+                ("outbound", "Absolutely. I sent it again and can adjust the scope if needed.", 51),
+            ],
+            "task": "Follow up on sent quote",
+            "note": "Asked about splitting the work into two phases.",
+        },
+        {
+            "marker": "demo-patel",
+            "name": "Priya Patel",
+            "phone": "+15035550163",
+            "email": "priya.patel@example.com",
+            "status": "lead",
+            "source": "phone",
+            "site": ("Side yard", "420 NE Fremont St", "Portland", "OR", "97212", "Inner NE"),
+            "messages": [
+                ("inbound", "I missed your call. Looking for a quote for gravel along the side yard.", 35),
+            ],
+            "task": "Call back and confirm access width",
+            "note": "Side gate may be narrow. Confirm access before final pricing.",
+        },
+    ]
 
-    kyle = CrmContact(
-        display_name="Kyle Bennett",
-        mobile_phone="+15035550141",
-        email="kyle@example.com",
-        status="lead",
-        source="website",
-        assigned_user="Sales",
-    )
-    avery = CrmContact(
-        display_name="Avery Cole",
-        mobile_phone="+15035550142",
-        email="avery@example.com",
-        status="quoted",
-        source="referral",
-        assigned_user="Sales",
-    )
-    db.add_all([kyle, avery])
-    db.flush()
+    for demo in demo_contacts:
+        contact = resolve_contact(db, phone=demo["phone"], name=demo["name"], email=demo["email"])
+        contact.status = demo["status"]
+        contact.source = demo["source"]
+        contact.assigned_user = "Sales"
+        if not contact.sites:
+            label, address, city, state, zip_code, zone = demo["site"]
+            db.add(
+                CrmServiceSite(
+                    contact_id=contact.id,
+                    label=label,
+                    address_line_1=address,
+                    city=city,
+                    state=state,
+                    zip=zip_code,
+                    delivery_zone=zone,
+                )
+            )
+            created += 1
+        conversation = get_or_create_conversation(db, contact.id)
+        conversation.status = "open"
+        conversation.assigned_user = "Sales"
+        if not demo_marker_exists(db, demo["marker"]):
+            for direction, body, minutes_ago in demo["messages"]:
+                created_at = now - timedelta(minutes=minutes_ago)
+                message = CrmMessage(
+                    conversation_id=conversation.id,
+                    contact_id=contact.id,
+                    direction=direction,
+                    channel="sms",
+                    body=body,
+                    delivery_status="received" if direction == "inbound" else "mock_sent",
+                    created_at=created_at,
+                )
+                db.add(message)
+                db.flush()
+                conversation.last_message_at = created_at
+                conversation.unread_count = max(conversation.unread_count or 0, 1 if direction == "inbound" else 0)
+                create_activity(
+                    db,
+                    contact_id=contact.id,
+                    related_type="message",
+                    related_id=message.id,
+                    activity_type=f"message.{direction}",
+                    title="Inbound message" if direction == "inbound" else "Outbound reply",
+                    body=body,
+                    metadata={"demo_marker": demo["marker"]},
+                )
+                created += 1
+            create_activity(
+                db,
+                contact_id=contact.id,
+                related_type="note",
+                activity_type="note.added",
+                title="Note added",
+                body=demo["note"],
+                metadata={"demo_marker": demo["marker"]},
+            )
+            db.add(
+                CrmTask(
+                    contact_id=contact.id,
+                    assigned_user="Sales",
+                    title=demo["task"],
+                    due_at=now + timedelta(hours=2 + created),
+                    priority="high" if demo["marker"] == "demo-rivera" else "normal",
+                )
+            )
+            created += 2
 
-    kyle_site = CrmServiceSite(
-        contact_id=kyle.id,
-        label="Home",
-        address_line_1="2217 SE Alder St",
-        city="Portland",
-        state="OR",
-        zip="97214",
-        delivery_zone="Central",
-    )
-    avery_site = CrmServiceSite(
-        contact_id=avery.id,
-        label="Backyard Project",
-        address_line_1="6110 N Omaha Ave",
-        city="Portland",
-        state="OR",
-        zip="97217",
-        delivery_zone="North",
-    )
-    db.add_all([kyle_site, avery_site])
-    db.flush()
-
-    conversation = CrmConversation(
-        contact_id=kyle.id,
-        channel_type="sms",
-        status="open",
-        unread_count=1,
-        assigned_user="Sales",
-        last_message_at=datetime.utcnow(),
-    )
-    db.add(conversation)
-    db.flush()
-    db.add_all(
-        [
-            CrmMessage(
-                conversation_id=conversation.id,
-                contact_id=kyle.id,
-                direction="inbound",
-                channel="sms",
-                body="Can BarkBoys quote mulch and cleanup for my front beds?",
-                delivery_status="received",
-            ),
-            CrmCall(
-                contact_id=kyle.id,
-                conversation_id=conversation.id,
-                direction="inbound",
-                status="missed",
-                from_number=kyle.mobile_phone,
-                to_number="+15035550000",
-                duration_seconds=0,
-            ),
-        ]
-    )
-
-    quote = CrmQuote(
-        contact_id=avery.id,
-        service_site_id=avery_site.id,
-        quote_number="CRM-BB-0001",
-        title="BarkBoys backyard refresh",
-        status="sent",
-        subtotal=Decimal("1845.00"),
-        delivery_total=Decimal("95.00"),
-        tax_total=Decimal("0.00"),
-        grand_total=Decimal("1940.00"),
-        sent_at=datetime.utcnow() - timedelta(hours=2),
-    )
-    db.add(quote)
-    db.flush()
-    version = CrmQuoteVersion(
-        quote_id=quote.id,
-        version_number=1,
-        pricing_snapshot_json=json.dumps({"source": "communication_crm_seed"}),
-        subtotal=quote.subtotal,
-        delivery_total=quote.delivery_total,
-        tax_total=quote.tax_total,
-        grand_total=quote.grand_total,
-    )
-    db.add(version)
-    db.flush()
-    quote.current_version_id = version.id
-    db.add_all(
-        [
+    quote_contact = resolve_contact(db, phone="+15035550162", name="Noah Chen", email="noah.chen@example.com")
+    if not db.query(CrmQuote).filter(CrmQuote.quote_number == "CRM-DEMO-1001").first():
+        quote = CrmQuote(
+            contact_id=quote_contact.id,
+            quote_number="CRM-DEMO-1001",
+            title="Backyard refresh",
+            status="sent",
+            subtotal=Decimal("1845.00"),
+            delivery_total=Decimal("95.00"),
+            tax_total=Decimal("0.00"),
+            grand_total=Decimal("1940.00"),
+            sent_at=now - timedelta(hours=2),
+        )
+        db.add(quote)
+        db.flush()
+        version = CrmQuoteVersion(
+            quote_id=quote.id,
+            version_number=1,
+            pricing_snapshot_json=json.dumps({"source": "communication_crm_demo"}),
+            subtotal=quote.subtotal,
+            delivery_total=quote.delivery_total,
+            tax_total=quote.tax_total,
+            grand_total=quote.grand_total,
+        )
+        db.add(version)
+        db.flush()
+        quote.current_version_id = version.id
+        db.add(
             CrmQuoteLineItem(
                 quote_version_id=version.id,
                 item_type="service",
-                name="Mulch installation",
-                quantity=8,
-                unit="yard",
-                unit_price=145,
-                total_price=1160,
+                name="Backyard refresh",
+                quantity=1,
+                unit="project",
+                unit_price=1845,
+                total_price=1845,
                 sort_order=1,
-                source_reference="barkboys-compatible",
-            ),
-            CrmTask(
-                contact_id=kyle.id,
-                assigned_user="Sales",
-                title="Reply with quote draft including edging option",
-                due_at=datetime.utcnow() + timedelta(hours=2),
-                priority="high",
-            ),
-            CrmExternalLink(
-                internal_type="quote",
-                internal_id=quote.id,
-                external_system="barkboys",
-                external_id="future-barkboys-quote-id",
-                metadata_json=json.dumps({"note": "Safe bridge link; no BarkBoys quote table mutation."}),
-            ),
-        ]
-    )
+                source_reference="demo",
+            )
+        )
+        create_activity(
+            db,
+            contact_id=quote_contact.id,
+            related_type="quote",
+            related_id=str(quote.id),
+            activity_type="quote.sent",
+            title="Quote sent",
+            body="CRM-DEMO-1001 was sent for backyard refresh.",
+            metadata={"demo_marker": "demo-quote"},
+        )
+        created += 4
 
-    create_activity(
-        db,
-        contact_id=kyle.id,
-        related_type="message",
-        activity_type="message.inbound",
-        title="Inbound text received",
-        body="Can BarkBoys quote mulch and cleanup for my front beds?",
-    )
-    create_activity(
-        db,
-        contact_id=kyle.id,
-        related_type="call",
-        activity_type="call.missed",
-        title="Missed call",
-        body="Missed inbound call from Kyle Bennett.",
-    )
-    create_activity(
-        db,
-        contact_id=avery.id,
-        related_type="quote",
-        related_id=quote.id,
-        activity_type="quote.sent",
-        title="Quote sent",
-        body="CRM-BB-0001 was sent from the isolated CRM module.",
-    )
     db.commit()
-    return {"ok": True, "seeded": True}
+    return {"ok": True, "seeded": created > 0, "created": created}

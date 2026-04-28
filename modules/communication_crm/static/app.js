@@ -17,6 +17,7 @@ const $$ = (selector) => Array.from(document.querySelectorAll(selector));
 
 document.addEventListener("click", handleClick);
 $("#seed").addEventListener("click", seedDemo);
+$("#seed-inline").addEventListener("click", seedDemo);
 $("#message-form").addEventListener("submit", sendMessage);
 $("#note-form").addEventListener("submit", saveContactNote);
 
@@ -85,14 +86,17 @@ function renderDashboard() {
     actionsNode: $("#dashboard-actions"),
     compact: false
   });
-  $("#activity").innerHTML = rows(state.dashboard?.recentActivity || [], (item) => `
+  $("#follow-ups").innerHTML = rows(state.dashboard?.followUps || [], (item) => `
+    <div class="side-row">
+      <strong>${esc(item.title)}</strong>
+      <p>${esc(item.assigned_user || "Unassigned")} ${fmt(item.due_at)}</p>
+      <span class="badge ${esc(item.priority)}">${esc(item.priority)}</span>
+    </div>
+  `, false);
+  $("#quote-activity").innerHTML = rows(state.dashboard?.quoteActivity || [], (item) => `
     <strong>${esc(item.title)}</strong>
     <p>${esc(item.body || "")}</p>
     <small>${esc(item.activity_type || "")} ${fmt(item.created_at)}</small>
-  `);
-  $("#external-links").innerHTML = rows(state.links, (item) => `
-    <strong>${esc(item.external_system)} ${esc(item.external_id)}</strong>
-    <p>${esc(item.internal_type)} ${esc(item.internal_id)}</p>
   `);
 }
 
@@ -192,21 +196,24 @@ function switchView(view) {
   state.activeView = view;
   $$(".view").forEach((section) => section.classList.toggle("active", section.id === view));
   $$("[data-view]").forEach((button) => button.classList.toggle("active", button.dataset.view === view));
-  $("#title").textContent = { dashboard: "Dashboard", inbox: "Inbox", contacts: "Contacts", quotes: "Quotes", calls: "Calls" }[view] || "Communication CRM";
+  $("#title").textContent = { dashboard: "Customer conversations", inbox: "Inbox", contacts: "Contacts", quotes: "Quotes", calls: "Calls" }[view] || "Communication CRM";
 }
 
 async function seedDemo() {
   await postJson("/crm/api/dev/seed-demo", {});
   toast("CRM demo data ready.");
+  state.selectedConversationId = null;
+  state.selectedContactId = null;
   await loadAll();
 }
 
 async function sendMessage(event) {
   event.preventDefault();
-  const body = new FormData(event.currentTarget).get("body");
+  const form = event.currentTarget;
+  const body = new FormData(form).get("body");
   if (!state.selectedConversationId || !body) return;
   await postJson(`/crm/api/conversations/${state.selectedConversationId}/messages`, { body });
-  event.currentTarget.reset();
+  form.reset();
   state.conversation = await getJson(`/crm/api/conversations/${state.selectedConversationId}`);
   toast("Outbound text logged in CRM timeline.");
   await loadAll();

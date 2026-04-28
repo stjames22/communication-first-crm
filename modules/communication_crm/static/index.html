@@ -19,12 +19,16 @@
   </aside>
 
   <main>
-    <header>
+    <header class="hero">
       <div>
-        <p class="eyebrow">Communication hub</p>
-        <h1 id="title">Dashboard</h1>
+        <p class="eyebrow">Communication CRM</p>
+        <h1 id="title">Customer conversations</h1>
+        <p class="hero-copy">Track customer messages, notes, follow-ups, and quote handoffs from one local workspace.</p>
       </div>
-      <button id="seed">Load CRM Demo Data</button>
+      <div class="hero-actions">
+        <button id="seed" class="primary">Load Demo Data</button>
+        <button data-view="inbox" type="button">Open Inbox</button>
+      </div>
     </header>
 
     <section id="dashboard" class="view active">
@@ -48,12 +52,21 @@
       </div>
       <div class="dashboard-secondary">
         <section class="card">
-          <h2>Recent Activity</h2>
-          <div id="activity"></div>
+          <h2>Follow-ups</h2>
+          <div id="follow-ups"></div>
         </section>
         <section class="card">
-          <h2>External Links</h2>
-          <div id="external-links"></div>
+          <h2>Quote Activity</h2>
+          <div id="quote-activity"></div>
+        </section>
+        <section class="card">
+          <h2>Quick Actions</h2>
+          <div class="quick-actions">
+            <button data-action="reply" type="button">Reply to Selected</button>
+            <button data-action="note" type="button">Add Note</button>
+            <button data-action="quote" class="primary" type="button">Start Quote</button>
+            <button id="seed-inline" type="button">Reload Demo Data</button>
+          </div>
         </section>
       </div>
     </section>
