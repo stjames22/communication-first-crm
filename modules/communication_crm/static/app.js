@@ -8,7 +8,8 @@ const state = {
   links: [],
   selectedConversationId: null,
   selectedContactId: null,
-  contactDetail: null
+  contactDetail: null,
+  activeView: "dashboard"
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -17,9 +18,7 @@ const $$ = (selector) => Array.from(document.querySelectorAll(selector));
 document.addEventListener("click", handleClick);
 $("#seed").addEventListener("click", seedDemo);
 $("#message-form").addEventListener("submit", sendMessage);
-$("#dashboard-start-quote").addEventListener("click", startQuoteFromSelectedContact);
-$("#inbox-start-quote").addEventListener("click", startQuoteFromSelectedContact);
-$("#contact-start-quote").addEventListener("click", startQuoteFromSelectedContact);
+$("#note-form").addEventListener("submit", saveContactNote);
 
 loadAll();
 
@@ -83,7 +82,7 @@ function renderDashboard() {
   renderContactPanel({
     titleNode: $("#dashboard-contact-title"),
     detailNode: $("#dashboard-contact-detail"),
-    buttonNode: $("#dashboard-start-quote"),
+    actionsNode: $("#dashboard-actions"),
     compact: false
   });
   $("#activity").innerHTML = rows(state.dashboard?.recentActivity || [], (item) => `
@@ -125,7 +124,7 @@ function renderInbox() {
   renderContactPanel({
     titleNode: null,
     detailNode: $("#summary"),
-    buttonNode: $("#inbox-start-quote"),
+    actionsNode: $("#inbox-actions"),
     compact: true,
     source: detail
   });
@@ -144,7 +143,7 @@ function renderContacts() {
   renderContactPanel({
     titleNode: $("#contact-title"),
     detailNode: $("#contact-detail"),
-    buttonNode: $("#contact-start-quote"),
+    actionsNode: $("#contact-actions"),
     compact: false
   });
 }
@@ -171,6 +170,11 @@ async function handleClick(event) {
     switchView(viewButton.dataset.view);
     return;
   }
+  const actionButton = event.target.closest("[data-action]");
+  if (actionButton) {
+    await handleAction(actionButton.dataset.action);
+    return;
+  }
   const conversation = event.target.closest("[data-conversation]");
   if (conversation) {
     await selectConversation(conversation.dataset.conversation, conversation.dataset.contact);
@@ -185,6 +189,7 @@ async function handleClick(event) {
 }
 
 function switchView(view) {
+  state.activeView = view;
   $$(".view").forEach((section) => section.classList.toggle("active", section.id === view));
   $$("[data-view]").forEach((button) => button.classList.toggle("active", button.dataset.view === view));
   $("#title").textContent = { dashboard: "Dashboard", inbox: "Inbox", contacts: "Contacts", quotes: "Quotes", calls: "Calls" }[view] || "Communication CRM";
@@ -219,6 +224,36 @@ async function selectContact(contactId) {
   state.contactDetail = await getJson(`/crm/api/contacts/${state.selectedContactId}`);
 }
 
+async function handleAction(action) {
+  if (action === "reply") {
+    await startReplyFromSelectedContact();
+    return;
+  }
+  if (action === "note") {
+    openNoteModal();
+    return;
+  }
+  if (action === "quote") {
+    await startQuoteFromSelectedContact();
+    return;
+  }
+  if (action === "close-note") {
+    closeNoteModal();
+  }
+}
+
+async function startReplyFromSelectedContact() {
+  if (!state.selectedContactId) return;
+  const conversation = state.conversations.find((item) => item.contact_id === state.selectedContactId) || state.conversations[0];
+  if (conversation) {
+    await selectConversation(conversation.id, conversation.contact_id);
+  }
+  switchView("inbox");
+  render();
+  const input = $("#message-form input[name='body']");
+  if (input) input.focus();
+}
+
 async function startQuoteFromSelectedContact() {
   if (!state.selectedContactId) return;
   const result = await postJson(`/api/contacts/${state.selectedContactId}/start-quote`, {});
@@ -226,21 +261,50 @@ async function startQuoteFromSelectedContact() {
   window.location.href = result.quote_url;
 }
 
-function renderContactPanel({ titleNode, detailNode, buttonNode, compact, source }) {
+function openNoteModal() {
+  if (!state.selectedContactId) return;
+  $("#note-modal").classList.remove("hidden");
+  $("#note-form textarea[name='body']").focus();
+}
+
+function closeNoteModal() {
+  $("#note-modal").classList.add("hidden");
+  $("#note-form").reset();
+}
+
+async function saveContactNote(event) {
+  event.preventDefault();
+  if (!state.selectedContactId) return;
+  const body = new FormData(event.currentTarget).get("body");
+  if (!body) return;
+  await postJson(`/crm/api/contacts/${state.selectedContactId}/notes`, { body });
+  closeNoteModal();
+  await refreshContact();
+  toast("Note saved.");
+}
+
+async function refreshContact() {
+  if (state.selectedContactId) {
+    state.contactDetail = await getJson(`/crm/api/contacts/${state.selectedContactId}`);
+  }
+  if (state.selectedConversationId) {
+    state.conversation = await getJson(`/crm/api/conversations/${state.selectedConversationId}`);
+  }
+  render();
+}
+
+function renderContactPanel({ titleNode, detailNode, actionsNode, compact, source }) {
   const detail = source || state.contactDetail;
   if (!detail?.contact) {
     if (titleNode) titleNode.textContent = "Contact Timeline";
-    if (buttonNode) buttonNode.classList.add("hidden");
+    if (actionsNode) actionsNode.classList.add("hidden");
     detailNode.innerHTML = "<p>Select a conversation to view the contact timeline.</p>";
     return;
   }
 
   const contact = detail.contact;
   if (titleNode) titleNode.textContent = contact.display_name || "Contact Timeline";
-  if (buttonNode) {
-    buttonNode.classList.remove("hidden");
-    buttonNode.dataset.contactId = contact.id;
-  }
+  if (actionsNode) actionsNode.classList.remove("hidden");
   const timeline = detail.timeline || [];
   detailNode.innerHTML = `
     <div class="contact-shell">

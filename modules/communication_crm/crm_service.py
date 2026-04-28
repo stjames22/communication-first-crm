@@ -229,6 +229,26 @@ def store_outbound_reply(db: Session, contact_id: str, message: str) -> Optional
     return crm_message
 
 
+def add_contact_note(db: Session, contact_id: str, body: str, actor_user: Optional[str] = None) -> Optional[CrmActivity]:
+    note = str(body or "").strip()
+    if not note:
+        raise ValueError("note is required")
+
+    contact = db.query(CrmContact).filter(CrmContact.id == contact_id).first()
+    if not contact:
+        return None
+
+    return create_activity(
+        db,
+        contact_id=contact.id,
+        related_type="note",
+        activity_type="note.added",
+        title="Note added",
+        body=note,
+        actor_user=actor_user,
+    )
+
+
 def start_quote_from_contact(db: Session, contact_id: str) -> Optional[dict[str, Any]]:
     contact = db.query(CrmContact).filter(CrmContact.id == contact_id).first()
     if not contact:

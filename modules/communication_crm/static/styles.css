@@ -67,7 +67,7 @@ h2 { font-size: 1rem; margin-bottom: 12px; }
   letter-spacing: .08em;
   text-transform: uppercase;
 }
-button, input {
+button, input, textarea {
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 10px 12px;
@@ -126,6 +126,12 @@ small { color: var(--muted); }
   margin-bottom: 12px;
 }
 .section-heading h2 { margin: 0; }
+.action-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
 .row {
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -247,6 +253,31 @@ small { color: var(--muted); }
   border-radius: 8px;
   background: var(--nav);
   color: #fff;
+}
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(20, 26, 36, 0.34);
+}
+.modal-card {
+  width: min(520px, 100%);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  padding: 16px;
+  box-shadow: 0 20px 60px rgba(20, 30, 45, 0.22);
+}
+.modal-card textarea {
+  width: 100%;
+  resize: vertical;
+}
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
 }
 .hidden { display: none; }
 

@@ -37,7 +37,11 @@
         <section class="card detail-card">
           <div class="section-heading">
             <h2 id="dashboard-contact-title">Contact Timeline</h2>
-            <button id="dashboard-start-quote" class="primary hidden" type="button">Start Quote</button>
+          </div>
+          <div id="dashboard-actions" class="action-bar hidden">
+            <button data-action="reply" type="button">Reply</button>
+            <button data-action="note" type="button">Add Note</button>
+            <button data-action="quote" class="primary" type="button">Start Quote</button>
           </div>
           <div id="dashboard-contact-detail"></div>
         </section>
@@ -71,7 +75,11 @@
         <section class="card">
           <div class="section-heading">
             <h2>Contact Summary</h2>
-            <button id="inbox-start-quote" class="primary hidden" type="button">Start Quote</button>
+          </div>
+          <div id="inbox-actions" class="action-bar hidden">
+            <button data-action="reply" type="button">Reply</button>
+            <button data-action="note" type="button">Add Note</button>
+            <button data-action="quote" class="primary" type="button">Start Quote</button>
           </div>
           <div id="summary"></div>
         </section>
@@ -87,7 +95,11 @@
         <section class="card thread-pane">
           <div class="section-heading">
             <h2 id="contact-title">Contact Detail</h2>
-            <button id="contact-start-quote" class="primary hidden" type="button">Start Quote</button>
+          </div>
+          <div id="contact-actions" class="action-bar hidden">
+            <button data-action="reply" type="button">Reply</button>
+            <button data-action="note" type="button">Add Note</button>
+            <button data-action="quote" class="primary" type="button">Start Quote</button>
           </div>
           <div id="contact-detail"></div>
         </section>
@@ -110,6 +122,18 @@
   </main>
 
   <div id="toast" class="toast hidden"></div>
+  <div id="note-modal" class="modal-backdrop hidden">
+    <form id="note-form" class="modal-card">
+      <div class="section-heading">
+        <h2>Add Note</h2>
+        <button data-action="close-note" type="button">Close</button>
+      </div>
+      <textarea name="body" rows="5" placeholder="Add an internal note"></textarea>
+      <div class="modal-actions">
+        <button class="primary" type="submit">Save Note</button>
+      </div>
+    </form>
+  </div>
   <script src="/crm/static/app.js"></script>
 </body>
 </html>

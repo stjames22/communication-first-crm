@@ -234,6 +234,15 @@ class BarkboysRegressionTests(unittest.TestCase):
             self.assertEqual(timeline.status_code, 200)
             self.assertTrue(any(item["activity_type"] == "message.inbound" for item in timeline.json()))
 
+            note = client.post(
+                f"/crm/api/contacts/{matched_payload['contact_id']}/notes",
+                json={"body": "Customer prefers text updates."},
+            )
+            self.assertEqual(note.status_code, 200)
+            noted_timeline = client.get(f"/api/contacts/{matched_payload['contact_id']}/timeline")
+            self.assertEqual(noted_timeline.status_code, 200)
+            self.assertTrue(any(item["activity_type"] == "note.added" for item in noted_timeline.json()))
+
             handoff = client.post(f"/api/contacts/{matched_payload['contact_id']}/start-quote", json={})
             self.assertEqual(handoff.status_code, 200)
             self.assertEqual(handoff.json()["contact_id"], matched_payload["contact_id"])

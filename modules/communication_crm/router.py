@@ -56,6 +56,25 @@ def crm_contact_timeline(contact_id: str, db: Session = Depends(get_db)):
     return crm_service.list_timeline(db, contact_id)
 
 
+@router.post("/api/contacts/{contact_id}/notes")
+def crm_add_contact_note(
+    contact_id: str,
+    payload: dict = Body(...),
+    db: Session = Depends(get_db),
+):
+    body = str(payload.get("body") or "").strip()
+    if not body:
+        raise HTTPException(status_code=400, detail="body is required")
+    try:
+        note = crm_service.add_contact_note(db, contact_id, body, actor_user=optional_string(payload.get("actor_user")))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not note:
+        raise HTTPException(status_code=404, detail="CRM contact not found")
+    db.commit()
+    return {"id": note.id, "status": "saved"}
+
+
 @router.get("/api/conversations")
 def crm_conversations(db: Session = Depends(get_db)):
     return crm_service.list_conversations(db)
