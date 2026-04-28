@@ -3,160 +3,92 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Communication CRM</title>
+  <title>Communication First CRM</title>
   <link rel="stylesheet" href="/crm/static/styles.css" />
 </head>
 <body>
-  <aside class="nav">
+  <header class="topbar">
     <strong>Communication First CRM</strong>
-    <button data-view="dashboard" class="active">Dashboard</button>
-    <button data-view="inbox">Inbox</button>
-    <button data-view="contacts">Contacts</button>
-    <button data-view="quotes">Proposals</button>
-    <button data-view="calls">Calls</button>
-  </aside>
+    <nav>
+      <button data-view="conversations" class="active">Conversations</button>
+      <button data-view="contacts">Contacts</button>
+      <button data-view="calls">Calls</button>
+      <button data-view="quotes">Proposals</button>
+    </nav>
+  </header>
 
   <main>
-    <header class="hero">
-      <div>
-        <p class="eyebrow">Communication First CRM</p>
-        <h1 id="title">Customer conversations</h1>
-        <p class="hero-copy">Track customer messages, notes, follow-ups, and proposal handoffs from one local workspace.</p>
-      </div>
-      <div class="hero-actions">
-        <button id="seed" class="primary">Load Demo Data</button>
-        <button data-view="inbox" type="button">Open Inbox</button>
-      </div>
-    </header>
+    <section id="conversations" class="view active">
+      <div class="inbox-shell">
+        <aside class="conversation-list-panel">
+          <div class="panel-heading">
+            <h1>Conversations</h1>
+            <button id="seed" type="button">Load Demo</button>
+          </div>
+          <div id="conversation-list"></div>
+        </aside>
 
-    <section id="dashboard" class="view active">
-      <div id="metrics" class="metrics"></div>
-      <div class="dashboard-layout">
-        <section class="card conversations-card">
-          <h2>Recent Conversations</h2>
-          <div id="recent-conversations"></div>
-        </section>
-        <section class="card detail-card">
-          <div class="section-heading">
-            <h2 id="dashboard-contact-title">Contact Timeline</h2>
-          </div>
-          <div id="dashboard-actions" class="action-bar hidden">
-            <button data-action="reply" type="button">Reply</button>
-            <button data-action="note" type="button">Add Note</button>
-            <button data-action="draft" type="button">Draft Reply</button>
-            <button data-action="followup" type="button">Assign Follow-up</button>
-            <button data-action="quote" class="primary" type="button">Start Proposal</button>
-            <button data-action="resolve" type="button">Mark Resolved</button>
-          </div>
-          <div id="dashboard-contact-detail"></div>
-        </section>
-      </div>
-      <div class="dashboard-secondary">
-        <section class="card">
-          <h2>Follow-ups</h2>
-          <div id="follow-ups"></div>
-        </section>
-        <section class="card">
-          <h2>Proposal Activity</h2>
-          <div id="quote-activity"></div>
-        </section>
-        <section class="card">
-          <h2>Quick Actions</h2>
-          <div class="quick-actions">
-            <button data-action="reply" type="button">Reply to Selected</button>
-            <button data-action="note" type="button">Add Note</button>
-            <button data-action="draft" type="button">Draft Reply</button>
-            <button data-action="followup" type="button">Assign Follow-up</button>
-            <button data-action="quote" class="primary" type="button">Start Proposal</button>
-            <button data-action="resolve" type="button">Mark Resolved</button>
-            <button id="seed-inline" type="button">Reload Demo Data</button>
-          </div>
-        </section>
-      </div>
-    </section>
+        <section class="active-conversation-panel">
+          <header class="contact-header">
+            <div>
+              <h2 id="active-contact-name">Select a conversation</h2>
+              <p id="active-contact-meta">Recent customer communication will appear here.</p>
+            </div>
+            <div id="active-actions" class="contact-actions hidden">
+              <button data-action="call" type="button">Call</button>
+              <button data-action="reply" type="button">Text</button>
+              <button data-action="email" type="button">Email</button>
+              <button data-action="quote" class="primary" type="button">Start Proposal</button>
+            </div>
+          </header>
 
-    <section id="inbox" class="view">
-      <div class="workspace">
-        <section class="card list-pane">
-          <h2>Conversations</h2>
-          <div id="conversations"></div>
-        </section>
-        <section class="card thread-pane">
-          <h2 id="thread-title">Thread</h2>
-          <div id="thread"></div>
-          <form id="message-form">
-            <input name="body" placeholder="Log an outbound text" />
-            <button type="submit">Send</button>
-          </form>
-        </section>
-        <section class="card">
-          <div class="section-heading">
-            <h2>Contact Summary</h2>
-          </div>
-          <div id="inbox-actions" class="action-bar hidden">
-            <button data-action="reply" type="button">Reply</button>
-            <button data-action="note" type="button">Add Note</button>
-            <button data-action="draft" type="button">Draft Reply</button>
-            <button data-action="followup" type="button">Assign Follow-up</button>
-            <button data-action="quote" class="primary" type="button">Start Proposal</button>
-            <button data-action="resolve" type="button">Mark Resolved</button>
-          </div>
-          <div id="summary"></div>
+          <section id="account-summary" class="account-summary-card hidden"></section>
+
+          <section id="thread" class="thread-list"></section>
+
+          <footer class="composer">
+            <form id="message-form" class="reply-form">
+              <input name="body" placeholder="Write a reply" />
+              <button class="primary" type="submit">Send</button>
+            </form>
+            <form id="note-form" class="note-form">
+              <textarea name="body" rows="2" placeholder="Add an internal note"></textarea>
+              <button type="submit">Add Note</button>
+            </form>
+          </footer>
         </section>
       </div>
     </section>
 
     <section id="contacts" class="view">
-      <div class="workspace contact-workspace">
-        <section class="card list-pane">
-          <h2>Contacts</h2>
+      <div class="simple-list-view">
+        <section class="list-card">
+          <h1>Contacts</h1>
           <div id="contact-list"></div>
         </section>
-        <section class="card thread-pane">
-          <div class="section-heading">
-            <h2 id="contact-title">Contact Detail</h2>
-          </div>
-          <div id="contact-actions" class="action-bar hidden">
-            <button data-action="reply" type="button">Reply</button>
-            <button data-action="note" type="button">Add Note</button>
-            <button data-action="draft" type="button">Draft Reply</button>
-            <button data-action="followup" type="button">Assign Follow-up</button>
-            <button data-action="quote" class="primary" type="button">Start Proposal</button>
-            <button data-action="resolve" type="button">Mark Resolved</button>
-          </div>
+        <section class="list-card">
+          <h2 id="contact-title">Contact Detail</h2>
           <div id="contact-detail"></div>
         </section>
       </div>
     </section>
 
-    <section id="quotes" class="view">
-      <section class="card">
-        <h2>Proposals</h2>
-        <div id="quote-list"></div>
+    <section id="calls" class="view">
+      <section class="list-card">
+        <h1>Calls</h1>
+        <div id="call-list"></div>
       </section>
     </section>
 
-    <section id="calls" class="view">
-      <section class="card">
-        <h2>Calls</h2>
-        <div id="call-list"></div>
+    <section id="quotes" class="view">
+      <section class="list-card">
+        <h1>Proposals</h1>
+        <div id="quote-list"></div>
       </section>
     </section>
   </main>
 
   <div id="toast" class="toast hidden"></div>
-  <div id="note-modal" class="modal-backdrop hidden">
-    <form id="note-form" class="modal-card">
-      <div class="section-heading">
-        <h2>Add Note</h2>
-        <button data-action="close-note" type="button">Close</button>
-      </div>
-      <textarea name="body" rows="5" placeholder="Add an internal note"></textarea>
-      <div class="modal-actions">
-        <button class="primary" type="submit">Save Note</button>
-      </div>
-    </form>
-  </div>
   <script src="/crm/static/app.js"></script>
 </body>
 </html>
