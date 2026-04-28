@@ -8,22 +8,20 @@
 </head>
 <body>
   <aside class="nav">
-    <strong>Communication CRM</strong>
-    <a href="/staff-crm">Sales Pipeline</a>
-    <a href="/staff-estimator">Estimator</a>
+    <strong>Communication First CRM</strong>
     <button data-view="dashboard" class="active">Dashboard</button>
     <button data-view="inbox">Inbox</button>
     <button data-view="contacts">Contacts</button>
-    <button data-view="quotes">Quotes</button>
+    <button data-view="quotes">Proposals</button>
     <button data-view="calls">Calls</button>
   </aside>
 
   <main>
     <header class="hero">
       <div>
-        <p class="eyebrow">Communication CRM</p>
+        <p class="eyebrow">Communication First CRM</p>
         <h1 id="title">Customer conversations</h1>
-        <p class="hero-copy">Track customer messages, notes, follow-ups, and quote handoffs from one local workspace.</p>
+        <p class="hero-copy">Track customer messages, notes, follow-ups, and proposal handoffs from one local workspace.</p>
       </div>
       <div class="hero-actions">
         <button id="seed" class="primary">Load Demo Data</button>
@@ -45,7 +43,7 @@
           <div id="dashboard-actions" class="action-bar hidden">
             <button data-action="reply" type="button">Reply</button>
             <button data-action="note" type="button">Add Note</button>
-            <button data-action="quote" class="primary" type="button">Start Quote</button>
+            <button data-action="quote" class="primary" type="button">Start Proposal</button>
           </div>
           <div id="dashboard-contact-detail"></div>
         </section>
@@ -56,7 +54,7 @@
           <div id="follow-ups"></div>
         </section>
         <section class="card">
-          <h2>Quote Activity</h2>
+          <h2>Proposal Activity</h2>
           <div id="quote-activity"></div>
         </section>
         <section class="card">
@@ -64,7 +62,7 @@
           <div class="quick-actions">
             <button data-action="reply" type="button">Reply to Selected</button>
             <button data-action="note" type="button">Add Note</button>
-            <button data-action="quote" class="primary" type="button">Start Quote</button>
+            <button data-action="quote" class="primary" type="button">Start Proposal</button>
             <button id="seed-inline" type="button">Reload Demo Data</button>
           </div>
         </section>
@@ -92,7 +90,7 @@
           <div id="inbox-actions" class="action-bar hidden">
             <button data-action="reply" type="button">Reply</button>
             <button data-action="note" type="button">Add Note</button>
-            <button data-action="quote" class="primary" type="button">Start Quote</button>
+            <button data-action="quote" class="primary" type="button">Start Proposal</button>
           </div>
           <div id="summary"></div>
         </section>
@@ -112,7 +110,7 @@
           <div id="contact-actions" class="action-bar hidden">
             <button data-action="reply" type="button">Reply</button>
             <button data-action="note" type="button">Add Note</button>
-            <button data-action="quote" class="primary" type="button">Start Quote</button>
+            <button data-action="quote" class="primary" type="button">Start Proposal</button>
           </div>
           <div id="contact-detail"></div>
         </section>
@@ -121,7 +119,7 @@
 
     <section id="quotes" class="view">
       <section class="card">
-        <h2>CRM Quotes</h2>
+        <h2>Proposals</h2>
         <div id="quote-list"></div>
       </section>
     </section>

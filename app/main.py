@@ -89,7 +89,7 @@ OPENAI_DNS_FAILURE_MARKERS = (
     "no address associated with hostname",
 )
 
-app = FastAPI(title="GrowthSignal API", version="0.1.0")
+app = FastAPI(title="Communication First CRM", version="0.1.0")
 
 if settings.cors_origins:
     app.add_middleware(
@@ -2344,7 +2344,7 @@ def _clear_estimator_session(response: Response, session_token: Optional[str]) -
 
 @app.get("/", response_class=HTMLResponse)
 def home_page():
-    return RedirectResponse(url="/demo", status_code=status.HTTP_303_SEE_OTHER)
+    return RedirectResponse(url="/crm/workspace", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @app.get("/demo", response_class=HTMLResponse)

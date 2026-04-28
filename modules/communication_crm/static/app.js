@@ -64,7 +64,7 @@ function renderDashboard() {
     ["Unread texts", metrics.unreadTexts || 0],
     ["Missed calls", metrics.missedCalls || 0],
     ["New leads", metrics.newLeads || 0],
-    ["Quote follow-up", metrics.quotesAwaitingFollowUp || 0],
+    ["Proposal follow-up", metrics.quotesAwaitingFollowUp || 0],
     ["Open tasks", metrics.tasksDueToday || 0]
   ];
   $("#metrics").innerHTML = items.map(([label, value]) => `<article class="card metric"><span>${esc(label)}</span><strong>${value}</strong></article>`).join("");
@@ -196,7 +196,7 @@ function switchView(view) {
   state.activeView = view;
   $$(".view").forEach((section) => section.classList.toggle("active", section.id === view));
   $$("[data-view]").forEach((button) => button.classList.toggle("active", button.dataset.view === view));
-  $("#title").textContent = { dashboard: "Customer conversations", inbox: "Inbox", contacts: "Contacts", quotes: "Quotes", calls: "Calls" }[view] || "Communication CRM";
+  $("#title").textContent = { dashboard: "Customer conversations", inbox: "Inbox", contacts: "Contacts", quotes: "Proposals", calls: "Calls" }[view] || "Communication First CRM";
 }
 
 async function seedDemo() {
@@ -264,7 +264,7 @@ async function startReplyFromSelectedContact() {
 async function startQuoteFromSelectedContact() {
   if (!state.selectedContactId) return;
   const result = await postJson(`/api/contacts/${state.selectedContactId}/start-quote`, {});
-  toast("Quote handoff ready.");
+  toast("Proposal handoff ready.");
   window.location.href = result.quote_url;
 }
 

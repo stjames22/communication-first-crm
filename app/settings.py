@@ -76,7 +76,7 @@ class Settings:
     def __init__(self) -> None:
         self.database_url = os.getenv(
             "GS_DATABASE_URL",
-            os.getenv("DATABASE_URL", "sqlite:///./barkboys_estimator.db"),
+            os.getenv("DATABASE_URL", "sqlite:///./communication_first_crm.db"),
         )
         self.storage_backend = (
             os.getenv("GS_STORAGE_BACKEND", "").strip().lower()

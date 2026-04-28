@@ -1,17 +1,11 @@
-# Railway app service variables for BarkBoys
+# Railway app service variables for Communication First CRM
 
-GS_STORAGE_BACKEND=s3
-GS_UPLOADS_PREFIX=barkboys
-GS_S3_BUCKET=your-bucket
-GS_S3_REGION=us-west-2
-GS_S3_ENDPOINT_URL=https://s3.amazonaws.com
-GS_S3_ACCESS_KEY_ID=your-access-key
-GS_S3_SECRET_ACCESS_KEY=your-secret-key
-
+GS_STORAGE_BACKEND=local
+GS_UPLOADS_PREFIX=communication-first-crm
 GS_API_KEY=replace-this
-GS_ESTIMATOR_USER=demo
-GS_ESTIMATOR_PASSWORD=change-this
 OPENAI_API_KEY=your_openai_api_key_here
 
-# Replace with the public Railway domain after it is generated.
+# Railway Postgres usually provides DATABASE_URL automatically.
+# GS_DATABASE_URL=postgresql+psycopg2://...
+
 GS_CORS_ORIGINS=https://your-generated-domain.up.railway.app

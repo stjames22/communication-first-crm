@@ -5,7 +5,7 @@ from app.main import _openai_health_payload, openai_health_diagnostics
 
 REASON_GUIDANCE = {
     "openai_not_configured": "Add OPENAI_API_KEY to ./backend/.env for reliable handwritten note parsing.",
-    "openai_auth_failed": "The API key was rejected. Update OPENAI_API_KEY in ./backend/.env and restart BarkBoys.",
+    "openai_auth_failed": "The API key was rejected. Update OPENAI_API_KEY in your local environment and restart the app.",
     "openai_rate_limited": "OpenAI is reachable, but billing or rate limits are blocking requests right now.",
     "openai_model_unavailable": "The configured vision model is unavailable. Check GS_OPENAI_VISION_MODEL in ./backend/.env.",
     "openai_ca_bundle_invalid": "The configured GS_OPENAI_CA_BUNDLE file is missing or invalid. Point it at a real PEM certificate bundle.",

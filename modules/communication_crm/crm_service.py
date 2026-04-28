@@ -258,13 +258,13 @@ def start_quote_from_contact(db: Session, contact_id: str) -> Optional[dict[str,
         contact_id=contact.id,
         related_type="quote",
         activity_type="quote.started",
-        title="Quote started",
-        body="Quote handoff started from contact.",
+        title="Proposal started",
+        body="Proposal handoff started from contact.",
     )
     return {
         "status": "ready",
         "contact_id": contact.id,
-        "quote_url": f"/staff-estimator?contact_id={contact.id}",
+        "quote_url": f"/crm/workspace?contact_id={contact.id}&proposal=1",
         "prefill": {
             "customer_name": contact.display_name,
             "phone": contact.mobile_phone if not str(contact.mobile_phone or "").startswith(("email:", "name:")) else None,
@@ -622,11 +622,11 @@ def seed_demo(db: Session) -> dict[str, Any]:
             "source": "website",
             "site": ("Home", "1842 SE Oak St", "Portland", "OR", "97214", "Central"),
             "messages": [
-                ("inbound", "Hi, can you help with a front yard cleanup and new mulch?", 90),
-                ("outbound", "Yes. I can start a quote today. Do you prefer text updates?", 84),
+                ("inbound", "Hi, can you help with a service appointment next week?", 90),
+                ("outbound", "Yes. I can start a proposal today. Do you prefer text updates?", 84),
                 ("inbound", "Text is best. Afternoon appointments work.", 12),
             ],
-            "task": "Send cleanup quote with afternoon scheduling options",
+            "task": "Send proposal with afternoon scheduling options",
             "note": "Prefers text updates. Afternoon appointments only.",
         },
         {
@@ -634,14 +634,14 @@ def seed_demo(db: Session) -> dict[str, Any]:
             "name": "Noah Chen",
             "phone": "+15035550162",
             "email": "noah.chen@example.com",
-            "status": "quoted",
+            "status": "proposal_sent",
             "source": "referral",
-            "site": ("Backyard", "7309 N Willamette Blvd", "Portland", "OR", "97203", "North"),
+            "site": ("Office", "7309 N Willamette Blvd", "Portland", "OR", "97203", "North"),
             "messages": [
-                ("inbound", "Can you resend the quote for the backyard refresh?", 55),
+                ("inbound", "Can you resend the proposal for the service plan?", 55),
                 ("outbound", "Absolutely. I sent it again and can adjust the scope if needed.", 51),
             ],
-            "task": "Follow up on sent quote",
+            "task": "Follow up on sent proposal",
             "note": "Asked about splitting the work into two phases.",
         },
         {
@@ -651,12 +651,12 @@ def seed_demo(db: Session) -> dict[str, Any]:
             "email": "priya.patel@example.com",
             "status": "lead",
             "source": "phone",
-            "site": ("Side yard", "420 NE Fremont St", "Portland", "OR", "97212", "Inner NE"),
+            "site": ("Primary site", "420 NE Fremont St", "Portland", "OR", "97212", "Inner NE"),
             "messages": [
-                ("inbound", "I missed your call. Looking for a quote for gravel along the side yard.", 35),
+                ("inbound", "I missed your call. Looking for a proposal for monthly service.", 35),
             ],
             "task": "Call back and confirm access width",
-            "note": "Side gate may be narrow. Confirm access before final pricing.",
+            "note": "Confirm access details before final proposal.",
         },
     ]
 
@@ -734,10 +734,10 @@ def seed_demo(db: Session) -> dict[str, Any]:
         quote = CrmQuote(
             contact_id=quote_contact.id,
             quote_number="CRM-DEMO-1001",
-            title="Backyard refresh",
+            title="Service plan proposal",
             status="sent",
             subtotal=Decimal("1845.00"),
-            delivery_total=Decimal("95.00"),
+            delivery_total=Decimal("0.00"),
             tax_total=Decimal("0.00"),
             grand_total=Decimal("1940.00"),
             sent_at=now - timedelta(hours=2),
@@ -760,7 +760,7 @@ def seed_demo(db: Session) -> dict[str, Any]:
             CrmQuoteLineItem(
                 quote_version_id=version.id,
                 item_type="service",
-                name="Backyard refresh",
+                name="Service plan",
                 quantity=1,
                 unit="project",
                 unit_price=1845,
@@ -775,8 +775,8 @@ def seed_demo(db: Session) -> dict[str, Any]:
             related_type="quote",
             related_id=str(quote.id),
             activity_type="quote.sent",
-            title="Quote sent",
-            body="CRM-DEMO-1001 was sent for backyard refresh.",
+            title="Proposal sent",
+            body="CRM-DEMO-1001 was sent for service plan review.",
             metadata={"demo_marker": "demo-quote"},
         )
         created += 4
