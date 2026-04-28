@@ -1466,7 +1466,7 @@ def health() -> dict:
 
 @app.get("/api/health")
 def api_health() -> dict:
-    return health()
+    return {"ok": True, "service": "communication-first-crm"}
 
 
 @app.get("/health/ui")

@@ -3,6 +3,7 @@
     "postinstall": "python3 -m pip install -r requirements.txt",
     "build": "python3 -m compileall app modules scripts",
     "start": "node scripts/start.js",
+    "dev": "./dev.sh",
     "test": "node scripts/test.js"
   },
   "dependencies": {
