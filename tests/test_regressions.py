@@ -45,7 +45,7 @@ from app.main import (
     uploaded_asset_content,
     ui_build_health,
 )
-from app.models import IntakeSubmission, JobPhoto, Lead, QuoteEvent, QuoteMedia, UploadedAsset
+from app.models import IntakeSubmission, JobPhoto, Lead, Quote, QuoteEvent, QuoteMedia, UploadedAsset
 from app.schemas import QuoteCreate, QuoteItemInput, UploadedAssetRef
 import app.ai_photo_analysis as ai_photo_analysis_module
 import app.ai_estimator as ai_estimator_module
@@ -200,6 +200,85 @@ class BarkboysRegressionTests(unittest.TestCase):
             second_messages = second_conversation.json()
             self.assertEqual([item["direction"] for item in second_messages], ["inbound", "outbound"])
             self.assertEqual(second_messages[1]["message"], "Yes, we can help.")
+
+            matched = client.post(
+                "/api/inbound-message",
+                json={
+                    "phone": "503-555-9999",
+                    "email": "sam@example.com",
+                    "name": "Sam Rivera",
+                    "message": "Following up by email",
+                    "channel": "email",
+                },
+            )
+            self.assertEqual(matched.status_code, 200)
+            matched_payload = matched.json()
+
+            matched_again = client.post(
+                "/api/inbound-message",
+                json={
+                    "email": "SAM@example.com",
+                    "name": "Sam Rivera",
+                    "message": "Same contact",
+                    "channel": "email",
+                },
+            )
+            self.assertEqual(matched_again.status_code, 200)
+            self.assertEqual(matched_again.json()["contact_id"], matched_payload["contact_id"])
+
+            recent = client.get("/api/conversations/recent")
+            self.assertEqual(recent.status_code, 200)
+            self.assertTrue(any(item["contact_id"] == matched_payload["contact_id"] for item in recent.json()))
+
+            timeline = client.get(f"/api/contacts/{matched_payload['contact_id']}/timeline")
+            self.assertEqual(timeline.status_code, 200)
+            self.assertTrue(any(item["activity_type"] == "message.inbound" for item in timeline.json()))
+
+            handoff = client.post(f"/api/contacts/{matched_payload['contact_id']}/start-quote", json={})
+            self.assertEqual(handoff.status_code, 200)
+            self.assertEqual(handoff.json()["contact_id"], matched_payload["contact_id"])
+
+            quote_payload = self._quote_create_from_draft(
+                {
+                    "job": {
+                        "customer_name": "Sam Rivera",
+                        "phone": "",
+                        "email": "sam@example.com",
+                        "address": "10 Main St",
+                        "zip_code": "97214",
+                        "area_sqft": "100",
+                        "terrain_type": "mixed",
+                        "primary_job_type": "cleanup",
+                        "detected_tasks": [],
+                        "notes": "",
+                        "crew_instructions": "",
+                        "estimated_labor_hours": "0",
+                        "material_cost": "0",
+                        "equipment_cost": "0",
+                        "suggested_price": "0",
+                        "source": "crm",
+                    },
+                    "items": [
+                        {
+                            "name": "Cleanup",
+                            "quantity": "1",
+                            "unit": "each",
+                            "base_price": "100",
+                            "per_unit_price": "0",
+                            "min_charge": "0",
+                        }
+                    ],
+                    "frequency": "one_time",
+                    "tax_rate": "0",
+                    "zone_modifier_percent": "0",
+                }
+            )
+            quote_payload.contact_id = matched_payload["contact_id"]
+            with self.SessionLocal() as db:
+                quote = create_quote(quote_payload, db)
+            self.assertEqual(quote["contact_id"], matched_payload["contact_id"])
+            with self.SessionLocal() as db:
+                self.assertEqual(db.query(Quote).filter(Quote.contact_id == matched_payload["contact_id"]).count(), 1)
         finally:
             main_module.app.dependency_overrides.pop(main_module.get_db, None)
 

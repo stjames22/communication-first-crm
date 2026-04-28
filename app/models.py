@@ -109,6 +109,7 @@ class Quote(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     job_id = Column(Integer, ForeignKey("jobs.id", ondelete="CASCADE"), nullable=False, index=True)
+    contact_id = Column(String(36), nullable=True, index=True)
     frequency = Column(String(32), nullable=False, default="monthly")
     tax_rate = Column(Numeric(5, 2), nullable=False, default=0)
     zone_modifier_percent = Column(Numeric(5, 2), nullable=False, default=0)

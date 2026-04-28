@@ -218,6 +218,12 @@ def _ensure_runtime_columns() -> None:
                 if column_name not in quote_item_columns:
                     conn.exec_driver_sql(f"ALTER TABLE quote_items ADD COLUMN {column_name} {column_type}")
 
+        if "quotes" in table_names:
+            quote_columns = {column["name"] for column in inspector.get_columns("quotes")}
+            if "contact_id" not in quote_columns:
+                conn.exec_driver_sql("ALTER TABLE quotes ADD COLUMN contact_id VARCHAR(36)")
+            conn.exec_driver_sql("CREATE INDEX IF NOT EXISTS quotes_contact_id_idx ON quotes (contact_id)")
+
         if "leads" in table_names:
             lead_columns = {column["name"] for column in inspector.get_columns("leads")}
             lead_column_defs = {
@@ -305,6 +311,8 @@ def communication_crm_inbound(payload: dict = Body(...), db: Session = Depends(g
             phone=str(payload.get("phone") or ""),
             message=str(payload.get("message") or ""),
             name=payload.get("name"),
+            email=payload.get("email"),
+            channel=payload.get("channel"),
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
@@ -316,12 +324,54 @@ def communication_crm_inbound(payload: dict = Body(...), db: Session = Depends(g
     }
 
 
+@app.post("/api/inbound-message")
+def communication_crm_inbound_message(payload: dict = Body(...), db: Session = Depends(get_db)) -> dict:
+    try:
+        result = crm_service.store_inbound_message(
+            db,
+            phone=payload.get("phone"),
+            name=payload.get("name"),
+            email=payload.get("email"),
+            message=str(payload.get("message") or ""),
+            channel=payload.get("channel"),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    db.commit()
+    return {
+        "status": "received",
+        "contact_id": result["contact"].id,
+        "message_id": result["message"].id,
+    }
+
+
+@app.get("/api/conversations/recent")
+def communication_crm_recent_conversations(db: Session = Depends(get_db)) -> list[dict]:
+    return crm_service.list_conversations(db)
+
+
 @app.get("/api/conversations/{contact_id}")
 def communication_crm_contact_conversations(contact_id: str, db: Session = Depends(get_db)) -> list[dict]:
     messages = crm_service.list_contact_messages(db, contact_id)
     if messages is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contact not found")
     return messages
+
+
+@app.get("/api/contacts/{contact_id}/timeline")
+def communication_crm_contact_timeline(contact_id: str, db: Session = Depends(get_db)) -> list[dict]:
+    if not crm_service.get_contact_detail(db, contact_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contact not found")
+    return crm_service.list_timeline(db, contact_id)
+
+
+@app.post("/api/contacts/{contact_id}/start-quote")
+def communication_crm_start_quote(contact_id: str, db: Session = Depends(get_db)) -> dict:
+    result = crm_service.start_quote_from_contact(db, contact_id)
+    if not result:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contact not found")
+    db.commit()
+    return result
 
 
 @app.post("/api/reply")
@@ -3129,6 +3179,7 @@ def _serialize_quote(quote: Quote) -> dict:
 
     return {
         "id": quote.id,
+        "contact_id": quote.contact_id,
         "created_at": quote.created_at,
         "frequency": quote.frequency,
         "zone_modifier_percent": quote.zone_modifier_percent,
@@ -3961,6 +4012,26 @@ def create_quote(payload: QuoteCreate, db: Session = Depends(get_db)):
     if not job_data["primary_job_type"] and detected_tasks:
         job_data["primary_job_type"] = str(detected_tasks[0].get("job_type") or "").strip().lower() or None
     capture_device = str(job_data.get("capture_device") or "unknown")
+    requested_contact_id = str(getattr(payload, "contact_id", None) or "").strip() or None
+    if requested_contact_id:
+        crm_contact = db.query(crm_service.CrmContact).filter(crm_service.CrmContact.id == requested_contact_id).first()
+        if not crm_contact:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contact not found")
+        if not job_data.get("phone") and not str(crm_contact.mobile_phone or "").startswith(("email:", "name:")):
+            job_data["phone"] = crm_contact.mobile_phone
+        if not job_data.get("email") and crm_contact.email:
+            job_data["email"] = crm_contact.email
+        if job_data["customer_name"] == customer_name and crm_contact.display_name:
+            job_data["customer_name"] = crm_contact.display_name
+        contact_id = crm_contact.id
+    else:
+        crm_contact = crm_service.resolve_contact(
+            db,
+            phone=job_data.get("phone"),
+            name=job_data.get("customer_name"),
+            email=job_data.get("email"),
+        )
+        contact_id = crm_contact.id
 
     job = Job(**job_data)
     db.add(job)
@@ -3975,6 +4046,7 @@ def create_quote(payload: QuoteCreate, db: Session = Depends(get_db)):
 
     quote = Quote(
         job_id=job.id,
+        contact_id=contact_id,
         frequency=payload.frequency,
         tax_rate=pricing["tax_rate"],
         zone_modifier_percent=payload.zone_modifier_percent,
@@ -4022,6 +4094,16 @@ def create_quote(payload: QuoteCreate, db: Session = Depends(get_db)):
         submitted_at=datetime.utcnow(),
     )
     db.add(lead)
+    crm_service.create_activity(
+        db,
+        contact_id=contact_id,
+        related_type="quote",
+        related_id=str(quote.id),
+        activity_type="quote.saved",
+        title="Quote saved",
+        body=f"Quote #{quote.id} saved.",
+        metadata={"quote_id": quote.id, "total": str(pricing["total"])},
+    )
 
     uploaded_asset_counts = _attach_uploaded_assets_to_quote(
         db=db,

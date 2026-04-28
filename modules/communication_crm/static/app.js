@@ -6,7 +6,9 @@ const state = {
   quotes: [],
   calls: [],
   links: [],
-  selectedConversationId: null
+  selectedConversationId: null,
+  selectedContactId: null,
+  contactDetail: null
 };
 
 const $ = (selector) => document.querySelector(selector);
@@ -34,8 +36,12 @@ async function loadAll() {
   state.calls = calls;
   state.links = links;
   state.selectedConversationId ||= conversations[0]?.id || null;
+  state.selectedContactId ||= contacts[0]?.id || null;
   if (state.selectedConversationId) {
     state.conversation = await getJson(`/crm/api/conversations/${state.selectedConversationId}`);
+  }
+  if (state.selectedContactId) {
+    state.contactDetail = await getJson(`/crm/api/contacts/${state.selectedContactId}`);
   }
   render();
 }
@@ -58,6 +64,13 @@ function renderDashboard() {
     ["Open tasks", metrics.tasksDueToday || 0]
   ];
   $("#metrics").innerHTML = items.map(([label, value]) => `<article class="card metric"><span>${esc(label)}</span><strong>${value}</strong></article>`).join("");
+  $("#recent-conversations").innerHTML = rows(state.conversations.slice(0, 6), (item) => `
+    <article class="row clickable" data-contact="${esc(item.contact_id)}" data-view-target="contacts">
+      <strong>${esc(item.display_name)}</strong>
+      <p>${esc(item.last_message_body || "No messages yet")}</p>
+      <small>${esc(item.mobile_phone || "")} ${item.unread_count ? item.unread_count + " unread" : ""}</small>
+    </article>
+  `, false);
   $("#activity").innerHTML = rows(state.dashboard?.recentActivity || [], (item) => `
     <strong>${esc(item.title)}</strong>
     <p>${esc(item.body || "")}</p>
@@ -95,6 +108,7 @@ function renderInbox() {
       <p>${esc(detail.contact.mobile_phone || "")}</p>
       <p>${esc(detail.contact.email || "No email")}</p>
       <p><span class="badge ${esc(detail.contact.status)}">${esc(detail.contact.status)}</span></p>
+      <button type="button" data-start-quote="${esc(detail.contact.id)}">Start Quote</button>
       <p>${esc(site(detail.contact.primary_site))}</p>
       <h2>Timeline</h2>
       ${rows(detail.timeline || [], (item) => `<strong>${esc(item.title)}</strong><p>${esc(item.body || "")}</p>`)}
@@ -104,11 +118,32 @@ function renderInbox() {
 
 function renderContacts() {
   $("#contact-list").innerHTML = rows(state.contacts, (item) => `
-    <strong>${esc(item.display_name)}</strong>
-    <p>${esc(item.mobile_phone || "")} ${esc(item.email || "")}</p>
-    <p>${esc(site(item.primary_site))}</p>
-    <span class="badge ${esc(item.status)}">${esc(item.status)}</span>
-  `);
+    <article class="row clickable ${item.id === state.selectedContactId ? "active" : ""}" data-contact="${esc(item.id)}">
+      <strong>${esc(item.display_name)}</strong>
+      <p>${esc(item.mobile_phone || "")} ${esc(item.email || "")}</p>
+      <p>${esc(site(item.primary_site))}</p>
+      <span class="badge ${esc(item.status)}">${esc(item.status)}</span>
+    </article>
+  `, false);
+
+  const detail = state.contactDetail;
+  $("#contact-title").textContent = detail?.contact?.display_name || "Contact Detail";
+  $("#contact-detail").innerHTML = detail
+    ? `
+      <div class="contact-actions">
+        <button type="button" data-start-quote="${esc(detail.contact.id)}">Start Quote</button>
+      </div>
+      <p>${esc(detail.contact.mobile_phone || "")}</p>
+      <p>${esc(detail.contact.email || "No email")}</p>
+      <p><span class="badge ${esc(detail.contact.status)}">${esc(detail.contact.status)}</span></p>
+      <h2>Timeline</h2>
+      ${rows(detail.timeline || [], (item) => `
+        <strong>${esc(item.title)}</strong>
+        <p>${esc(item.body || "")}</p>
+        <small>${esc(item.activity_type || "")} ${fmt(item.created_at)}</small>
+      `)}
+    `
+    : "<p>Select a contact.</p>";
 }
 
 function renderQuotes() {
@@ -138,6 +173,22 @@ async function handleClick(event) {
     state.selectedConversationId = conversation.dataset.conversation;
     state.conversation = await getJson(`/crm/api/conversations/${state.selectedConversationId}`);
     renderInbox();
+  }
+  const contact = event.target.closest("[data-contact]");
+  if (contact) {
+    state.selectedContactId = contact.dataset.contact;
+    state.contactDetail = await getJson(`/crm/api/contacts/${state.selectedContactId}`);
+    if (contact.dataset.viewTarget) {
+      switchView(contact.dataset.viewTarget);
+    }
+    renderContacts();
+    return;
+  }
+  const startQuote = event.target.closest("[data-start-quote]");
+  if (startQuote) {
+    const result = await postJson(`/api/contacts/${startQuote.dataset.startQuote}/start-quote`, {});
+    toast("Quote handoff ready.");
+    window.location.href = result.quote_url;
   }
 }
 

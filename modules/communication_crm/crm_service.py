@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import uuid
 from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any, Optional
@@ -36,10 +37,20 @@ def row_id(value: Any) -> Optional[str]:
     return str(value) if value is not None else None
 
 
-def normalize_phone(phone: str) -> str:
+def normalize_email(email: Optional[str]) -> Optional[str]:
+    clean_email = str(email or "").strip().lower()
+    return clean_email or None
+
+
+def normalize_name(name: Optional[str]) -> Optional[str]:
+    clean_name = re.sub(r"\s+", " ", str(name or "").strip())
+    return clean_name or None
+
+
+def normalize_phone(phone: Optional[str]) -> Optional[str]:
     raw_phone = str(phone or "").strip()
     if not raw_phone:
-        raise ValueError("phone is required")
+        return None
     digits = re.sub(r"\D+", "", raw_phone)
     if len(digits) == 10:
         return f"+1{digits}"
@@ -49,22 +60,49 @@ def normalize_phone(phone: str) -> str:
         return f"+{digits}"
     if digits:
         return digits
-    raise ValueError("phone is required")
+    return None
 
 
-def resolve_contact(db: Session, phone: str, name: Optional[str] = None) -> CrmContact:
+def resolve_contact(
+    db: Session,
+    phone: Optional[str] = None,
+    name: Optional[str] = None,
+    email: Optional[str] = None,
+) -> CrmContact:
     normalized_phone = normalize_phone(phone)
-    contact = db.query(CrmContact).filter(CrmContact.mobile_phone == normalized_phone).first()
+    normalized_email = normalize_email(email)
+    clean_name = normalize_name(name)
+    if not normalized_phone and not normalized_email and not clean_name:
+        raise ValueError("phone, email, or name is required")
+
+    contact = None
+    if normalized_phone:
+        contact = db.query(CrmContact).filter(CrmContact.mobile_phone == normalized_phone).first()
+    if contact is None and normalized_email:
+        contact = db.query(CrmContact).filter(func.lower(CrmContact.email) == normalized_email).first()
+    if contact is None and clean_name:
+        contact = db.query(CrmContact).filter(func.lower(CrmContact.display_name) == clean_name.lower()).first()
+
     if contact:
-        clean_name = str(name or "").strip()
-        if clean_name and contact.display_name == normalized_phone:
+        if clean_name and contact.display_name == contact.mobile_phone:
             contact.display_name = clean_name
+        if normalized_email and not contact.email:
+            contact.email = normalized_email
+        if normalized_phone and str(contact.mobile_phone or "").startswith(("email:", "name:")):
+            contact.mobile_phone = normalized_phone
         return contact
 
-    display_name = str(name or "").strip() or normalized_phone
+    display_name = clean_name or normalized_email or normalized_phone
+    if normalized_phone:
+        phone_value = normalized_phone
+    elif normalized_email:
+        phone_value = f"email:{normalized_email}"
+    else:
+        phone_value = f"name:{uuid.uuid4()}"
     contact = CrmContact(
         display_name=display_name,
-        mobile_phone=normalized_phone,
+        mobile_phone=phone_value,
+        email=normalized_email,
         status="lead",
         source="inbound",
     )
@@ -99,19 +137,27 @@ def serialize_core_message(message: CrmMessage) -> dict[str, Any]:
     }
 
 
-def store_inbound_message(db: Session, phone: str, message: str, name: Optional[str] = None) -> dict[str, Any]:
+def store_inbound_message(
+    db: Session,
+    phone: Optional[str],
+    message: str,
+    name: Optional[str] = None,
+    email: Optional[str] = None,
+    channel: Optional[str] = None,
+) -> dict[str, Any]:
     body = str(message or "").strip()
     if not body:
         raise ValueError("message is required")
 
-    contact = resolve_contact(db, phone, name=name)
+    contact = resolve_contact(db, phone, name=name, email=email)
     conversation = get_or_create_conversation(db, contact.id)
     created_at = datetime.utcnow()
+    channel_value = str(channel or "sms").strip().lower() or "sms"
     crm_message = CrmMessage(
         conversation_id=conversation.id,
         contact_id=contact.id,
         direction="inbound",
-        channel="sms",
+        channel=channel_value[:32],
         body=body,
         delivery_status="received",
         created_at=created_at,
@@ -128,6 +174,7 @@ def store_inbound_message(db: Session, phone: str, message: str, name: Optional[
         activity_type="message.inbound",
         title="Inbound message received",
         body=body,
+        metadata={"channel": channel_value},
     )
     return {"contact": contact, "message": crm_message}
 
@@ -180,6 +227,30 @@ def store_outbound_reply(db: Session, contact_id: str, message: str) -> Optional
         metadata={"provider": "mock"},
     )
     return crm_message
+
+
+def start_quote_from_contact(db: Session, contact_id: str) -> Optional[dict[str, Any]]:
+    contact = db.query(CrmContact).filter(CrmContact.id == contact_id).first()
+    if not contact:
+        return None
+    create_activity(
+        db,
+        contact_id=contact.id,
+        related_type="quote",
+        activity_type="quote.started",
+        title="Quote started",
+        body="Quote handoff started from contact.",
+    )
+    return {
+        "status": "ready",
+        "contact_id": contact.id,
+        "quote_url": f"/staff-estimator?contact_id={contact.id}",
+        "prefill": {
+            "customer_name": contact.display_name,
+            "phone": contact.mobile_phone if not str(contact.mobile_phone or "").startswith(("email:", "name:")) else None,
+            "email": contact.email,
+        },
+    }
 
 
 def create_activity(

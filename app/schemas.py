@@ -172,6 +172,7 @@ class QuoteCreate(ORMModel):
     frequency: FrequencyType = "monthly"
     tax_rate: Decimal = Field(default=0, ge=0, le=100)
     zone_modifier_percent: Decimal = Field(default=0, ge=-100, le=100)
+    contact_id: Optional[str] = None
     uploaded_assets: List[UploadedAssetRef] = Field(default_factory=list)
     intake_submission_id: Optional[int] = None
 
@@ -188,6 +189,7 @@ class QuotePricingOut(ORMModel):
 
 class QuoteOut(QuotePricingOut):
     id: int
+    contact_id: Optional[str] = None
     created_at: Optional[datetime] = None
     frequency: FrequencyType
     zone_modifier_percent: Decimal

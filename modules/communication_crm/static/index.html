@@ -31,9 +31,15 @@
       <div id="metrics" class="metrics"></div>
       <div class="grid">
         <section class="card">
+          <h2>Recent Conversations</h2>
+          <div id="recent-conversations"></div>
+        </section>
+        <section class="card">
           <h2>Recent Activity</h2>
           <div id="activity"></div>
         </section>
+      </div>
+      <div class="grid secondary-grid">
         <section class="card">
           <h2>External Links</h2>
           <div id="external-links"></div>
@@ -63,10 +69,16 @@
     </section>
 
     <section id="contacts" class="view">
-      <section class="card">
-        <h2>Contacts</h2>
-        <div id="contact-list"></div>
-      </section>
+      <div class="workspace contact-workspace">
+        <section class="card list-pane">
+          <h2>Contacts</h2>
+          <div id="contact-list"></div>
+        </section>
+        <section class="card thread-pane">
+          <h2 id="contact-title">Contact Detail</h2>
+          <div id="contact-detail"></div>
+        </section>
+      </div>
     </section>
 
     <section id="quotes" class="view">
