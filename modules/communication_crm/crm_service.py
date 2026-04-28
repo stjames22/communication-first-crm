@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any, Optional
@@ -33,6 +34,152 @@ def money(value: Any) -> float:
 
 def row_id(value: Any) -> Optional[str]:
     return str(value) if value is not None else None
+
+
+def normalize_phone(phone: str) -> str:
+    raw_phone = str(phone or "").strip()
+    if not raw_phone:
+        raise ValueError("phone is required")
+    digits = re.sub(r"\D+", "", raw_phone)
+    if len(digits) == 10:
+        return f"+1{digits}"
+    if len(digits) == 11 and digits.startswith("1"):
+        return f"+{digits}"
+    if raw_phone.startswith("+") and digits:
+        return f"+{digits}"
+    if digits:
+        return digits
+    raise ValueError("phone is required")
+
+
+def resolve_contact(db: Session, phone: str, name: Optional[str] = None) -> CrmContact:
+    normalized_phone = normalize_phone(phone)
+    contact = db.query(CrmContact).filter(CrmContact.mobile_phone == normalized_phone).first()
+    if contact:
+        clean_name = str(name or "").strip()
+        if clean_name and contact.display_name == normalized_phone:
+            contact.display_name = clean_name
+        return contact
+
+    display_name = str(name or "").strip() or normalized_phone
+    contact = CrmContact(
+        display_name=display_name,
+        mobile_phone=normalized_phone,
+        status="lead",
+        source="inbound",
+    )
+    db.add(contact)
+    db.flush()
+    return contact
+
+
+def get_or_create_conversation(db: Session, contact_id: str) -> CrmConversation:
+    conversation = (
+        db.query(CrmConversation)
+        .filter(CrmConversation.contact_id == contact_id, CrmConversation.channel_type == "sms")
+        .order_by(desc(CrmConversation.created_at))
+        .first()
+    )
+    if conversation:
+        return conversation
+
+    conversation = CrmConversation(contact_id=contact_id, channel_type="sms", status="open")
+    db.add(conversation)
+    db.flush()
+    return conversation
+
+
+def serialize_core_message(message: CrmMessage) -> dict[str, Any]:
+    return {
+        "id": message.id,
+        "contact_id": message.contact_id,
+        "message": message.body,
+        "direction": message.direction,
+        "timestamp": message.created_at.isoformat() if message.created_at else None,
+    }
+
+
+def store_inbound_message(db: Session, phone: str, message: str, name: Optional[str] = None) -> dict[str, Any]:
+    body = str(message or "").strip()
+    if not body:
+        raise ValueError("message is required")
+
+    contact = resolve_contact(db, phone, name=name)
+    conversation = get_or_create_conversation(db, contact.id)
+    created_at = datetime.utcnow()
+    crm_message = CrmMessage(
+        conversation_id=conversation.id,
+        contact_id=contact.id,
+        direction="inbound",
+        channel="sms",
+        body=body,
+        delivery_status="received",
+        created_at=created_at,
+    )
+    db.add(crm_message)
+    db.flush()
+    conversation.last_message_at = crm_message.created_at or created_at
+    conversation.unread_count = (conversation.unread_count or 0) + 1
+    create_activity(
+        db,
+        contact_id=contact.id,
+        related_type="message",
+        related_id=crm_message.id,
+        activity_type="message.inbound",
+        title="Inbound message received",
+        body=body,
+    )
+    return {"contact": contact, "message": crm_message}
+
+
+def list_contact_messages(db: Session, contact_id: str) -> Optional[list[dict[str, Any]]]:
+    contact = db.query(CrmContact).filter(CrmContact.id == contact_id).first()
+    if not contact:
+        return None
+    messages = (
+        db.query(CrmMessage)
+        .filter(CrmMessage.contact_id == contact_id)
+        .order_by(CrmMessage.created_at, CrmMessage.id)
+        .all()
+    )
+    return [serialize_core_message(message) for message in messages]
+
+
+def store_outbound_reply(db: Session, contact_id: str, message: str) -> Optional[CrmMessage]:
+    body = str(message or "").strip()
+    if not body:
+        raise ValueError("message is required")
+
+    contact = db.query(CrmContact).filter(CrmContact.id == contact_id).first()
+    if not contact:
+        return None
+
+    conversation = get_or_create_conversation(db, contact.id)
+    created_at = datetime.utcnow()
+    crm_message = CrmMessage(
+        conversation_id=conversation.id,
+        contact_id=contact.id,
+        direction="outbound",
+        channel="sms",
+        body=body,
+        delivery_status="mock_sent",
+        created_at=created_at,
+    )
+    db.add(crm_message)
+    db.flush()
+    conversation.last_message_at = crm_message.created_at or created_at
+    conversation.unread_count = 0
+    create_activity(
+        db,
+        contact_id=contact.id,
+        related_type="message",
+        related_id=crm_message.id,
+        activity_type="message.outbound",
+        title="Outbound reply logged",
+        body=body,
+        metadata={"provider": "mock"},
+    )
+    return crm_message
 
 
 def create_activity(

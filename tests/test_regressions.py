@@ -15,6 +15,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from fastapi import HTTPException
+from fastapi.testclient import TestClient
 from starlette.datastructures import Headers, UploadFile
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
@@ -58,6 +59,7 @@ from app.ai_photo_analysis import (
 )
 from app.storage import StorageManager
 from app.settings import Settings
+from modules.communication_crm.models import CrmContact
 
 
 class BarkboysRegressionTests(unittest.TestCase):
@@ -151,6 +153,55 @@ class BarkboysRegressionTests(unittest.TestCase):
         start = html.index(start_marker)
         end = html.index(end_marker, start)
         return html[start:end]
+
+    def test_core_crm_communication_flow(self) -> None:
+        def override_get_db():
+            db = self.SessionLocal()
+            try:
+                yield db
+            finally:
+                db.close()
+
+        main_module.app.dependency_overrides[main_module.get_db] = override_get_db
+        try:
+            client = TestClient(main_module.app)
+
+            inbound = client.post(
+                "/api/inbound",
+                json={"phone": "(503) 555-0199", "name": "Sam Rivera", "message": "Can I get a quote?"},
+            )
+            self.assertEqual(inbound.status_code, 200)
+            inbound_payload = inbound.json()
+            self.assertEqual(inbound_payload["status"], "received")
+            self.assertTrue(inbound_payload["contact_id"])
+            self.assertTrue(inbound_payload["message_id"])
+
+            with self.SessionLocal() as db:
+                contact = db.query(CrmContact).filter(CrmContact.id == inbound_payload["contact_id"]).one()
+                self.assertEqual(contact.display_name, "Sam Rivera")
+                self.assertEqual(contact.mobile_phone, "+15035550199")
+
+            first_conversation = client.get(f"/api/conversations/{inbound_payload['contact_id']}")
+            self.assertEqual(first_conversation.status_code, 200)
+            first_messages = first_conversation.json()
+            self.assertEqual(len(first_messages), 1)
+            self.assertEqual(first_messages[0]["direction"], "inbound")
+            self.assertEqual(first_messages[0]["message"], "Can I get a quote?")
+
+            reply = client.post(
+                "/api/reply",
+                json={"contact_id": inbound_payload["contact_id"], "message": "Yes, we can help."},
+            )
+            self.assertEqual(reply.status_code, 200)
+            self.assertEqual(reply.json()["status"], "sent")
+
+            second_conversation = client.get(f"/api/conversations/{inbound_payload['contact_id']}")
+            self.assertEqual(second_conversation.status_code, 200)
+            second_messages = second_conversation.json()
+            self.assertEqual([item["direction"] for item in second_messages], ["inbound", "outbound"])
+            self.assertEqual(second_messages[1]["message"], "Yes, we can help.")
+        finally:
+            main_module.app.dependency_overrides.pop(main_module.get_db, None)
 
     def _estimator_const_source(self, const_name: str) -> str:
         html = self.ESTIMATOR_HTML_PATH.read_text()

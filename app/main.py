@@ -64,6 +64,7 @@ from .schemas import (
 from .settings import get_settings, refresh_settings, runtime_openai_api_key
 from .storage import storage
 from modules.communication_crm import create_crm_tables, crm_router
+from modules.communication_crm import crm_service
 
 settings = get_settings()
 ESTIMATOR_HTML_PATH = Path(__file__).resolve().parent / "static" / "estimator.html"
@@ -294,6 +295,52 @@ def require_estimator_access(
 
 
 app.include_router(crm_router, prefix="/crm", dependencies=[Depends(require_api_key)])
+
+
+@app.post("/api/inbound")
+def communication_crm_inbound(payload: dict = Body(...), db: Session = Depends(get_db)) -> dict:
+    try:
+        result = crm_service.store_inbound_message(
+            db,
+            phone=str(payload.get("phone") or ""),
+            message=str(payload.get("message") or ""),
+            name=payload.get("name"),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    db.commit()
+    return {
+        "status": "received",
+        "contact_id": result["contact"].id,
+        "message_id": result["message"].id,
+    }
+
+
+@app.get("/api/conversations/{contact_id}")
+def communication_crm_contact_conversations(contact_id: str, db: Session = Depends(get_db)) -> list[dict]:
+    messages = crm_service.list_contact_messages(db, contact_id)
+    if messages is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contact not found")
+    return messages
+
+
+@app.post("/api/reply")
+def communication_crm_reply(payload: dict = Body(...), db: Session = Depends(get_db)) -> dict:
+    contact_id = str(payload.get("contact_id") or "").strip()
+    if not contact_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="contact_id is required")
+    try:
+        message = crm_service.store_outbound_reply(
+            db,
+            contact_id=contact_id,
+            message=str(payload.get("message") or ""),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    if not message:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contact not found")
+    db.commit()
+    return {"status": "sent", "message_id": message.id}
 
 
 def _staff_session_required_redirect(barkboys_staff_session: Optional[str] = None) -> Optional[RedirectResponse]:
