@@ -11,6 +11,7 @@ from typing import Any, Optional
 from sqlalchemy import desc, func
 from sqlalchemy.orm import Session, selectinload
 
+from .first_message import generate_first_message
 from .models import (
     CrmActivity,
     CrmCall,
@@ -245,6 +246,82 @@ def serialize_core_message(message: CrmMessage) -> dict[str, Any]:
     }
 
 
+def count_messages(db: Session, contact_id: str) -> int:
+    return db.query(CrmMessage).filter(CrmMessage.contact_id == contact_id).count()
+
+
+def is_first_interaction(db: Session, contact_id: str) -> bool:
+    return count_messages(db, contact_id) == 1
+
+
+def has_auto_first_message(db: Session, contact_id: str) -> bool:
+    return (
+        db.query(CrmActivity)
+        .filter(
+            CrmActivity.contact_id == contact_id,
+            CrmActivity.activity_type == "message.outbound",
+            CrmActivity.metadata_json.like('%"auto_first_message": true%'),
+        )
+        .first()
+        is not None
+    )
+
+
+def first_message_context(message: str, channel: Optional[str] = None) -> Optional[str]:
+    text = f"{message or ''} {channel or ''}".lower()
+    if any(term in text for term in ["issue", "problem", "broken", "not working", "support", "help"]):
+        return "support"
+    if any(term in text for term in ["quote", "proposal", "price", "setup", "buy", "sales"]):
+        return "sales"
+    if any(term in text for term in ["follow up", "following up", "checking in", "move forward"]):
+        return "followup"
+    return None
+
+
+def store_auto_first_message(
+    db: Session,
+    *,
+    contact_id: str,
+    conversation_id: str,
+    channel: str,
+    context: Optional[str] = None,
+) -> Optional[CrmMessage]:
+    if has_auto_first_message(db, contact_id):
+        return None
+
+    body = generate_first_message(context)
+    created_at = datetime.utcnow()
+    crm_message = CrmMessage(
+        conversation_id=conversation_id,
+        contact_id=contact_id,
+        direction="outbound",
+        channel=channel[:32],
+        body=body,
+        delivery_status="system_generated",
+        sent_by_user="system",
+        created_at=created_at,
+    )
+    db.add(crm_message)
+    db.flush()
+    create_activity(
+        db,
+        contact_id=contact_id,
+        related_type="message",
+        related_id=crm_message.id,
+        activity_type="message.outbound",
+        title="Auto first message",
+        body=body,
+        actor_user="system",
+        metadata={
+            "channel": channel,
+            "context": context,
+            "system_generated": True,
+            "auto_first_message": True,
+        },
+    )
+    return crm_message
+
+
 def store_inbound_message(
     db: Session,
     phone: Optional[str],
@@ -289,7 +366,23 @@ def store_inbound_message(
             "duplicate_warning": resolution["duplicate_warning"],
         },
     )
-    return {"contact": contact, "message": crm_message, "resolution": resolution}
+    auto_first_message = None
+    if is_first_interaction(db, contact.id):
+        auto_first_message = store_auto_first_message(
+            db,
+            contact_id=contact.id,
+            conversation_id=conversation.id,
+            channel=channel_value,
+            context=first_message_context(body, channel_value),
+        )
+        if auto_first_message:
+            conversation.last_message_at = auto_first_message.created_at or datetime.utcnow()
+    return {
+        "contact": contact,
+        "message": crm_message,
+        "resolution": resolution,
+        "auto_first_message": auto_first_message,
+    }
 
 
 def list_contact_messages(db: Session, contact_id: str) -> Optional[list[dict[str, Any]]]:
@@ -787,6 +880,7 @@ def serialize_quote_summary(quote: CrmQuote) -> dict[str, Any]:
 
 
 def serialize_activity(activity: CrmActivity) -> dict[str, Any]:
+    metadata = safe_json(activity.metadata_json)
     return {
         "id": activity.id,
         "contact_id": activity.contact_id,
@@ -796,7 +890,8 @@ def serialize_activity(activity: CrmActivity) -> dict[str, Any]:
         "title": activity.title,
         "body": activity.body,
         "actor_user": activity.actor_user,
-        "metadata": safe_json(activity.metadata_json),
+        "metadata": metadata,
+        "system_generated": bool(metadata.get("system_generated")),
         "created_at": activity.created_at.isoformat() if activity.created_at else None,
     }
 

@@ -297,6 +297,21 @@ small { color: var(--muted); }
   padding: 12px;
   background: #fff;
 }
+.timeline-item.system-generated {
+  background: #f8fafc;
+  opacity: 0.86;
+}
+.auto-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 2px 7px;
+  margin-left: 6px;
+  background: #e6eef8;
+  color: var(--blue);
+  font-size: .72rem;
+  font-weight: 800;
+}
 .timeline-dot {
   width: 10px;
   height: 10px;

@@ -59,7 +59,7 @@ from app.ai_photo_analysis import (
 )
 from app.storage import StorageManager
 from app.settings import Settings
-from modules.communication_crm.models import CrmContact
+from modules.communication_crm.models import CrmContact, CrmMessage
 
 
 class BarkboysRegressionTests(unittest.TestCase):
@@ -184,9 +184,11 @@ class BarkboysRegressionTests(unittest.TestCase):
             first_conversation = client.get(f"/api/conversations/{inbound_payload['contact_id']}")
             self.assertEqual(first_conversation.status_code, 200)
             first_messages = first_conversation.json()
-            self.assertEqual(len(first_messages), 1)
+            self.assertEqual(len(first_messages), 2)
             self.assertEqual(first_messages[0]["direction"], "inbound")
             self.assertEqual(first_messages[0]["message"], "Can I get a quote?")
+            self.assertEqual(first_messages[1]["direction"], "outbound")
+            self.assertIn("Got it", first_messages[1]["message"])
 
             reply = client.post(
                 "/api/reply",
@@ -198,8 +200,8 @@ class BarkboysRegressionTests(unittest.TestCase):
             second_conversation = client.get(f"/api/conversations/{inbound_payload['contact_id']}")
             self.assertEqual(second_conversation.status_code, 200)
             second_messages = second_conversation.json()
-            self.assertEqual([item["direction"] for item in second_messages], ["inbound", "outbound"])
-            self.assertEqual(second_messages[1]["message"], "Yes, we can help.")
+            self.assertEqual([item["direction"] for item in second_messages], ["inbound", "outbound", "outbound"])
+            self.assertEqual(second_messages[2]["message"], "Yes, we can help.")
 
             demo = client.post("/crm/api/dev/seed-demo", json={})
             self.assertEqual(demo.status_code, 200)
@@ -368,6 +370,75 @@ class BarkboysRegressionTests(unittest.TestCase):
             self.assertEqual(quote["contact_id"], matched_payload["contact_id"])
             with self.SessionLocal() as db:
                 self.assertEqual(db.query(Quote).filter(Quote.contact_id == matched_payload["contact_id"]).count(), 1)
+        finally:
+            main_module.app.dependency_overrides.pop(main_module.get_db, None)
+
+    def test_first_message_only_once(self) -> None:
+        def override_get_db():
+            db = self.SessionLocal()
+            try:
+                yield db
+            finally:
+                db.close()
+
+        main_module.app.dependency_overrides[main_module.get_db] = override_get_db
+        try:
+            client = TestClient(main_module.app)
+
+            first = client.post(
+                "/api/inbound-message",
+                json={
+                    "phone": "(503) 555-3131",
+                    "name": "Taylor Morgan",
+                    "message": "I need help getting set up.",
+                    "channel": "sms",
+                },
+            )
+            self.assertEqual(first.status_code, 200)
+            contact_id = first.json()["contact_id"]
+
+            with self.SessionLocal() as db:
+                messages = (
+                    db.query(CrmMessage)
+                    .filter(CrmMessage.contact_id == contact_id)
+                    .order_by(CrmMessage.created_at, CrmMessage.id)
+                    .all()
+                )
+                self.assertEqual([message.direction for message in messages], ["inbound", "outbound"])
+                self.assertEqual(messages[1].delivery_status, "system_generated")
+                self.assertIn("Got it", messages[1].body)
+
+            second = client.post(
+                "/api/inbound-message",
+                json={
+                    "phone": "503-555-3131",
+                    "name": "Taylor Morgan",
+                    "message": "Following up with one more detail.",
+                    "channel": "sms",
+                },
+            )
+            self.assertEqual(second.status_code, 200)
+            self.assertEqual(second.json()["contact_id"], contact_id)
+
+            with self.SessionLocal() as db:
+                outbound_auto_count = (
+                    db.query(CrmMessage)
+                    .filter(
+                        CrmMessage.contact_id == contact_id,
+                        CrmMessage.direction == "outbound",
+                        CrmMessage.delivery_status == "system_generated",
+                    )
+                    .count()
+                )
+                total_messages = db.query(CrmMessage).filter(CrmMessage.contact_id == contact_id).count()
+                self.assertEqual(outbound_auto_count, 1)
+                self.assertEqual(total_messages, 3)
+
+            timeline = client.get(f"/api/contacts/{contact_id}/timeline")
+            self.assertEqual(timeline.status_code, 200)
+            auto_items = [item for item in timeline.json() if item.get("system_generated")]
+            self.assertEqual(len(auto_items), 1)
+            self.assertEqual(auto_items[0]["metadata"]["auto_first_message"], True)
         finally:
             main_module.app.dependency_overrides.pop(main_module.get_db, None)
 

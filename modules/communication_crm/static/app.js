@@ -375,10 +375,10 @@ function renderContactPanel({ titleNode, detailNode, actionsNode, compact, sourc
       ` : ""}
       <div class="timeline">
         ${timeline.length ? timeline.map((item) => `
-          <article class="timeline-item">
+          <article class="timeline-item ${item.system_generated ? "system-generated" : ""}">
             <span class="timeline-dot"></span>
             <div>
-              <strong>${esc(item.title)}</strong>
+              <strong>${esc(item.title)}${item.system_generated ? ` <span class="auto-badge">Auto</span>` : ""}</strong>
               <p>${esc(item.body || "")}</p>
               <small>${esc(item.activity_type || "")} ${fmt(item.created_at)}</small>
             </div>
