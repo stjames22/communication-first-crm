@@ -1464,6 +1464,11 @@ def health() -> dict:
     return {"status": "ok"}
 
 
+@app.get("/api/health")
+def api_health() -> dict:
+    return health()
+
+
 @app.get("/health/ui")
 def ui_build_health() -> dict:
     return {

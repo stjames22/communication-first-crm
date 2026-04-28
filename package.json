@@ -1,4 +1,10 @@
 {
+  "scripts": {
+    "postinstall": "python3 -m pip install -r requirements.txt",
+    "build": "python3 -m compileall app modules scripts",
+    "start": "node scripts/start.js",
+    "test": "node scripts/test.js"
+  },
   "dependencies": {
     "dotenv": "^17.3.1"
   }

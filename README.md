@@ -2,6 +2,27 @@
 
 FastAPI backend with a testable BarkBoys estimator UI.
 
+## Remote Development Workflow
+
+Use the GitHub repository as the source of truth so work can continue from any computer without reconnecting a local folder.
+
+```bash
+git pull origin main
+npm install
+npm run build
+npm test
+```
+
+In a Codex cloud project, open the repository directly from GitHub, pull the latest `main`, make changes in the cloud workspace, run the build and test commands above, then commit and push back to `main` or to a review branch.
+
+Start the app with:
+
+```bash
+npm start
+```
+
+The server reads `PORT` from the environment and falls back to `8000` when it is not set. Health checks are available at `/health` and `/api/health`.
+
 ## What is included
 - `/staff-estimator` staff-only estimator UI for quote building
 - `/staff-crm` staff quote vault (CRM-lite) for saved quote search/re-open
