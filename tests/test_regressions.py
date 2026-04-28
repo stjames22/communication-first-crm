@@ -258,6 +258,75 @@ class BarkboysRegressionTests(unittest.TestCase):
             self.assertEqual(handoff.status_code, 200)
             self.assertEqual(handoff.json()["contact_id"], matched_payload["contact_id"])
 
+            sms_webhook = client.post(
+                "/api/webhooks/sms",
+                json={
+                    "provider": "twilio",
+                    "MessageSid": "SM-test-1",
+                    "From": "(503) 555-9999",
+                    "Body": "This is urgent, can you confirm next steps today?",
+                    "ProfileName": "Sam Rivera",
+                },
+            )
+            self.assertEqual(sms_webhook.status_code, 200)
+            self.assertEqual(sms_webhook.json()["contact_id"], matched_payload["contact_id"])
+            self.assertIn(sms_webhook.json()["match_type"], {"phone", "name", "email", "fuzzy_name"})
+
+            call_webhook = client.post(
+                "/api/webhooks/calls",
+                json={
+                    "provider": "ringcentral",
+                    "id": "call-test-1",
+                    "from": "(503) 555-9999",
+                    "to": "(503) 555-0100",
+                    "direction": "inbound",
+                    "status": "missed",
+                    "notes": "Missed call from customer.",
+                },
+            )
+            self.assertEqual(call_webhook.status_code, 200)
+            self.assertEqual(call_webhook.json()["contact_id"], matched_payload["contact_id"])
+
+            assistant = client.get(f"/api/contacts/{matched_payload['contact_id']}/assistant")
+            self.assertEqual(assistant.status_code, 200)
+            assistant_payload = assistant.json()
+            self.assertIn("urgent_or_confusing", assistant_payload["flags"])
+            self.assertIn("Next,", assistant_payload["draft_reply"])
+
+            draft = client.post(f"/api/contacts/{matched_payload['contact_id']}/draft-reply", json={})
+            self.assertEqual(draft.status_code, 200)
+            draft_activity_id = draft.json()["activity"]["id"]
+
+            edited = client.patch(
+                f"/api/review/{draft_activity_id}",
+                json={"status": "edited", "body": "Thanks, I saw this. I can help. Next, I will confirm the details today."},
+            )
+            self.assertEqual(edited.status_code, 200)
+            self.assertEqual(edited.json()["activity"]["metadata"]["status"], "edited")
+
+            sent_draft = client.post(f"/api/review/{draft_activity_id}/approve-send", json={})
+            self.assertEqual(sent_draft.status_code, 200)
+            self.assertTrue(sent_draft.json()["message_id"])
+
+            follow_up = client.post(
+                f"/api/contacts/{matched_payload['contact_id']}/follow-ups",
+                json={"title": "Confirm service details", "priority": "high"},
+            )
+            self.assertEqual(follow_up.status_code, 200)
+            self.assertEqual(follow_up.json()["task"]["status"], "open")
+
+            resolved = client.post(f"/api/contacts/{matched_payload['contact_id']}/resolve", json={})
+            self.assertEqual(resolved.status_code, 200)
+            self.assertEqual(resolved.json()["status"], "resolved")
+
+            final_timeline = client.get(f"/api/contacts/{matched_payload['contact_id']}/timeline")
+            self.assertEqual(final_timeline.status_code, 200)
+            final_activity_types = {item["activity_type"] for item in final_timeline.json()}
+            self.assertIn("call.missed", final_activity_types)
+            self.assertIn("assistant.draft_reply", final_activity_types)
+            self.assertIn("follow_up.assigned", final_activity_types)
+            self.assertIn("review.resolved", final_activity_types)
+
             quote_payload = self._quote_create_from_draft(
                 {
                     "job": {

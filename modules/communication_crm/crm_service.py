@@ -5,6 +5,7 @@ import re
 import uuid
 from datetime import datetime, timedelta
 from decimal import Decimal
+from difflib import SequenceMatcher
 from typing import Any, Optional
 
 from sqlalchemy import desc, func
@@ -63,12 +64,71 @@ def normalize_phone(phone: Optional[str]) -> Optional[str]:
     return None
 
 
-def resolve_contact(
+def _name_similarity(left: Optional[str], right: Optional[str]) -> float:
+    clean_left = normalize_name(left)
+    clean_right = normalize_name(right)
+    if not clean_left or not clean_right:
+        return 0.0
+    return SequenceMatcher(None, clean_left.lower(), clean_right.lower()).ratio()
+
+
+def _find_duplicate_candidates(
+    db: Session,
+    *,
+    contact: Optional[CrmContact],
+    normalized_phone: Optional[str],
+    normalized_email: Optional[str],
+    clean_name: Optional[str],
+) -> list[CrmContact]:
+    candidates: list[CrmContact] = []
+    seen: set[str] = set()
+
+    if clean_name:
+        possible_names = db.query(CrmContact).limit(300).all()
+        for row in possible_names:
+            if contact and row.id == contact.id:
+                continue
+            if row.id in seen:
+                continue
+            if _name_similarity(clean_name, row.display_name) >= 0.86:
+                candidates.append(row)
+                seen.add(row.id)
+
+    if normalized_email:
+        local_part = normalized_email.split("@", 1)[0]
+        if local_part:
+            for row in db.query(CrmContact).filter(CrmContact.email.isnot(None)).limit(300).all():
+                if contact and row.id == contact.id:
+                    continue
+                if row.id in seen:
+                    continue
+                row_local = str(row.email or "").lower().split("@", 1)[0]
+                if row_local and SequenceMatcher(None, local_part, row_local).ratio() >= 0.9:
+                    candidates.append(row)
+                    seen.add(row.id)
+
+    if normalized_phone:
+        last_seven = re.sub(r"\D+", "", normalized_phone)[-7:]
+        if last_seven:
+            for row in db.query(CrmContact).limit(300).all():
+                if contact and row.id == contact.id:
+                    continue
+                if row.id in seen:
+                    continue
+                row_digits = re.sub(r"\D+", "", str(row.mobile_phone or ""))
+                if row_digits.endswith(last_seven):
+                    candidates.append(row)
+                    seen.add(row.id)
+
+    return candidates[:5]
+
+
+def resolve_contact_details(
     db: Session,
     phone: Optional[str] = None,
     name: Optional[str] = None,
     email: Optional[str] = None,
-) -> CrmContact:
+) -> dict[str, Any]:
     normalized_phone = normalize_phone(phone)
     normalized_email = normalize_email(email)
     clean_name = normalize_name(name)
@@ -76,52 +136,100 @@ def resolve_contact(
         raise ValueError("phone, email, or name is required")
 
     contact = None
+    match_type = "created"
     if normalized_phone:
         contact = db.query(CrmContact).filter(CrmContact.mobile_phone == normalized_phone).first()
+        if contact:
+            match_type = "phone"
     if contact is None and normalized_email:
         contact = db.query(CrmContact).filter(func.lower(CrmContact.email) == normalized_email).first()
+        if contact:
+            match_type = "email"
     if contact is None and clean_name:
-        contact = db.query(CrmContact).filter(func.lower(CrmContact.display_name) == clean_name.lower()).first()
+        exact_name = db.query(CrmContact).filter(func.lower(CrmContact.display_name) == clean_name.lower()).first()
+        if exact_name:
+            contact = exact_name
+            match_type = "name"
+        else:
+            for row in db.query(CrmContact).limit(300).all():
+                if _name_similarity(clean_name, row.display_name) >= 0.92:
+                    contact = row
+                    match_type = "fuzzy_name"
+                    break
 
     if contact:
-        if clean_name and contact.display_name == contact.mobile_phone:
+        if clean_name and (contact.display_name == contact.mobile_phone or contact.display_name.startswith(("email:", "name:"))):
             contact.display_name = clean_name
         if normalized_email and not contact.email:
             contact.email = normalized_email
-        if normalized_phone and str(contact.mobile_phone or "").startswith(("email:", "name:")):
-            contact.mobile_phone = normalized_phone
-        return contact
-
-    display_name = clean_name or normalized_email or normalized_phone
-    if normalized_phone:
-        phone_value = normalized_phone
-    elif normalized_email:
-        phone_value = f"email:{normalized_email}"
+        if normalized_phone and contact.mobile_phone != normalized_phone:
+            phone_owner = db.query(CrmContact).filter(CrmContact.mobile_phone == normalized_phone).first()
+            if not phone_owner or phone_owner.id == contact.id:
+                contact.mobile_phone = normalized_phone
     else:
-        phone_value = f"name:{uuid.uuid4()}"
-    contact = CrmContact(
-        display_name=display_name,
-        mobile_phone=phone_value,
-        email=normalized_email,
-        status="lead",
-        source="inbound",
+        display_name = clean_name or normalized_email or normalized_phone
+        if normalized_phone:
+            phone_value = normalized_phone
+        elif normalized_email:
+            phone_value = f"email:{normalized_email}"
+        else:
+            phone_value = f"name:{uuid.uuid4()}"
+        contact = CrmContact(
+            display_name=display_name,
+            mobile_phone=phone_value,
+            email=normalized_email,
+            status="lead",
+            source="inbound",
+        )
+        db.add(contact)
+        db.flush()
+
+    duplicate_candidates = _find_duplicate_candidates(
+        db,
+        contact=contact,
+        normalized_phone=normalized_phone,
+        normalized_email=normalized_email,
+        clean_name=clean_name,
     )
-    db.add(contact)
-    db.flush()
-    return contact
+    warnings = []
+    if duplicate_candidates:
+        warnings.append("possible_duplicate")
+
+    return {
+        "contact": contact,
+        "match_type": match_type,
+        "normalized": {
+            "phone": normalized_phone,
+            "email": normalized_email,
+            "name": clean_name,
+        },
+        "duplicate_warning": bool(duplicate_candidates),
+        "warnings": warnings,
+        "duplicate_candidates": [serialize_contact(candidate) for candidate in duplicate_candidates],
+    }
 
 
-def get_or_create_conversation(db: Session, contact_id: str) -> CrmConversation:
+def resolve_contact(
+    db: Session,
+    phone: Optional[str] = None,
+    name: Optional[str] = None,
+    email: Optional[str] = None,
+) -> CrmContact:
+    return resolve_contact_details(db, phone=phone, name=name, email=email)["contact"]
+
+
+def get_or_create_conversation(db: Session, contact_id: str, channel: str = "sms") -> CrmConversation:
+    channel_value = str(channel or "sms").strip().lower() or "sms"
     conversation = (
         db.query(CrmConversation)
-        .filter(CrmConversation.contact_id == contact_id, CrmConversation.channel_type == "sms")
+        .filter(CrmConversation.contact_id == contact_id, CrmConversation.channel_type == channel_value[:32])
         .order_by(desc(CrmConversation.created_at))
         .first()
     )
     if conversation:
         return conversation
 
-    conversation = CrmConversation(contact_id=contact_id, channel_type="sms", status="open")
+    conversation = CrmConversation(contact_id=contact_id, channel_type=channel_value[:32], status="open")
     db.add(conversation)
     db.flush()
     return conversation
@@ -149,10 +257,11 @@ def store_inbound_message(
     if not body:
         raise ValueError("message is required")
 
-    contact = resolve_contact(db, phone, name=name, email=email)
-    conversation = get_or_create_conversation(db, contact.id)
+    resolution = resolve_contact_details(db, phone, name=name, email=email)
+    contact = resolution["contact"]
     created_at = datetime.utcnow()
     channel_value = str(channel or "sms").strip().lower() or "sms"
+    conversation = get_or_create_conversation(db, contact.id, channel=channel_value)
     crm_message = CrmMessage(
         conversation_id=conversation.id,
         contact_id=contact.id,
@@ -174,9 +283,13 @@ def store_inbound_message(
         activity_type="message.inbound",
         title="Inbound message received",
         body=body,
-        metadata={"channel": channel_value},
+        metadata={
+            "channel": channel_value,
+            "match_type": resolution["match_type"],
+            "duplicate_warning": resolution["duplicate_warning"],
+        },
     )
-    return {"contact": contact, "message": crm_message}
+    return {"contact": contact, "message": crm_message, "resolution": resolution}
 
 
 def list_contact_messages(db: Session, contact_id: str) -> Optional[list[dict[str, Any]]]:
@@ -229,6 +342,167 @@ def store_outbound_reply(db: Session, contact_id: str, message: str) -> Optional
     return crm_message
 
 
+def normalize_provider_message(payload: dict[str, Any], provider: str = "generic") -> dict[str, Any]:
+    provider_name = str(provider or payload.get("provider") or "generic").strip().lower() or "generic"
+    return {
+        "provider": provider_name,
+        "provider_message_id": row_id(
+            payload.get("provider_message_id")
+            or payload.get("message_id")
+            or payload.get("MessageSid")
+            or payload.get("id")
+        ),
+        "phone": payload.get("phone") or payload.get("from") or payload.get("From") or payload.get("caller"),
+        "to": payload.get("to") or payload.get("To"),
+        "name": payload.get("name") or payload.get("customer_name") or payload.get("ProfileName"),
+        "email": payload.get("email"),
+        "message": payload.get("message") or payload.get("body") or payload.get("Body") or payload.get("text"),
+        "channel": payload.get("channel") or "sms",
+    }
+
+
+def store_provider_inbound_message(db: Session, payload: dict[str, Any], provider: str = "generic") -> dict[str, Any]:
+    normalized = normalize_provider_message(payload, provider=provider)
+    if normalized["provider_message_id"]:
+        existing = (
+            db.query(CrmMessage)
+            .filter(CrmMessage.provider_message_id == normalized["provider_message_id"])
+            .first()
+        )
+        if existing:
+            contact = db.query(CrmContact).filter(CrmContact.id == existing.contact_id).first()
+            return {
+                "contact": contact,
+                "message": existing,
+                "provider": normalized["provider"],
+                "resolution": {
+                    "match_type": "provider_message_id",
+                    "duplicate_warning": False,
+                    "warnings": [],
+                },
+            }
+    result = store_inbound_message(
+        db,
+        phone=normalized["phone"],
+        name=normalized["name"],
+        email=normalized["email"],
+        message=str(normalized["message"] or ""),
+        channel=normalized["channel"],
+    )
+    message = result["message"]
+    if normalized["provider_message_id"]:
+        message.provider_message_id = normalized["provider_message_id"]
+    create_activity(
+        db,
+        contact_id=result["contact"].id,
+        related_type="provider_event",
+        related_id=message.id,
+        activity_type="provider.message_received",
+        title="Provider message received",
+        body=str(normalized["message"] or "").strip(),
+        metadata={
+            "provider": normalized["provider"],
+            "provider_message_id": normalized["provider_message_id"],
+            "channel": normalized["channel"],
+        },
+    )
+    return {**result, "provider": normalized["provider"]}
+
+
+def normalize_call_event(payload: dict[str, Any], provider: str = "generic") -> dict[str, Any]:
+    provider_name = str(provider or payload.get("provider") or "generic").strip().lower() or "generic"
+    direction = str(payload.get("direction") or payload.get("Direction") or "inbound").strip().lower()
+    status_value = str(payload.get("status") or payload.get("CallStatus") or payload.get("event") or "logged").strip().lower()
+    return {
+        "provider": provider_name,
+        "provider_call_id": row_id(payload.get("provider_call_id") or payload.get("CallSid") or payload.get("id")),
+        "phone": payload.get("phone") or payload.get("from") or payload.get("From") or payload.get("caller"),
+        "to": payload.get("to") or payload.get("To") or payload.get("business_phone") or "",
+        "name": payload.get("name") or payload.get("customer_name"),
+        "email": payload.get("email"),
+        "direction": direction if direction in {"inbound", "outbound"} else "inbound",
+        "status": status_value[:32] or "logged",
+        "duration_seconds": payload.get("duration_seconds") or payload.get("Duration"),
+        "notes": payload.get("notes") or payload.get("summary"),
+    }
+
+
+def store_call_event(db: Session, payload: dict[str, Any], provider: str = "generic") -> dict[str, Any]:
+    normalized = normalize_call_event(payload, provider=provider)
+    if normalized["provider_call_id"]:
+        existing = (
+            db.query(CrmCall)
+            .filter(CrmCall.provider_call_id == normalized["provider_call_id"])
+            .first()
+        )
+        if existing:
+            contact = db.query(CrmContact).filter(CrmContact.id == existing.contact_id).first()
+            activity = (
+                db.query(CrmActivity)
+                .filter(CrmActivity.related_type == "call", CrmActivity.related_id == existing.id)
+                .order_by(desc(CrmActivity.created_at))
+                .first()
+            )
+            return {
+                "contact": contact,
+                "call": existing,
+                "activity": activity,
+                "resolution": {
+                    "match_type": "provider_call_id",
+                    "duplicate_warning": False,
+                    "warnings": [],
+                },
+            }
+    resolution = resolve_contact_details(
+        db,
+        phone=normalized["phone"],
+        name=normalized["name"],
+        email=normalized["email"],
+    )
+    contact = resolution["contact"]
+    conversation = get_or_create_conversation(db, contact.id, channel="phone")
+    duration = None
+    if normalized["duration_seconds"] not in (None, ""):
+        try:
+            duration = int(normalized["duration_seconds"])
+        except (TypeError, ValueError):
+            duration = None
+    call = CrmCall(
+        contact_id=contact.id,
+        conversation_id=conversation.id,
+        provider_call_id=normalized["provider_call_id"],
+        direction=normalized["direction"],
+        status=normalized["status"],
+        from_number=normalize_phone(normalized["phone"]) or str(normalized["phone"] or ""),
+        to_number=normalize_phone(normalized["to"]) or str(normalized["to"] or ""),
+        duration_seconds=duration,
+        notes=normalized["notes"],
+        started_at=datetime.utcnow(),
+    )
+    db.add(call)
+    db.flush()
+    conversation.last_message_at = call.started_at
+    if normalized["direction"] == "inbound" and normalized["status"] in {"missed", "no-answer", "ringing"}:
+        conversation.unread_count = (conversation.unread_count or 0) + 1
+    activity = create_activity(
+        db,
+        contact_id=contact.id,
+        related_type="call",
+        related_id=call.id,
+        activity_type=f"call.{normalized['status']}",
+        title="Call event logged",
+        body=normalized["notes"],
+        metadata={
+            "provider": normalized["provider"],
+            "provider_call_id": normalized["provider_call_id"],
+            "direction": normalized["direction"],
+            "match_type": resolution["match_type"],
+            "duplicate_warning": resolution["duplicate_warning"],
+        },
+    )
+    return {"contact": contact, "call": call, "activity": activity, "resolution": resolution}
+
+
 def add_contact_note(db: Session, contact_id: str, body: str, actor_user: Optional[str] = None) -> Optional[CrmActivity]:
     note = str(body or "").strip()
     if not note:
@@ -247,6 +521,176 @@ def add_contact_note(db: Session, contact_id: str, body: str, actor_user: Option
         body=note,
         actor_user=actor_user,
     )
+
+
+def assign_follow_up(
+    db: Session,
+    contact_id: str,
+    title: str,
+    due_at: Optional[str] = None,
+    assigned_user: Optional[str] = None,
+    priority: str = "normal",
+) -> Optional[CrmTask]:
+    contact = db.query(CrmContact).filter(CrmContact.id == contact_id).first()
+    if not contact:
+        return None
+    clean_title = str(title or "").strip()
+    if not clean_title:
+        raise ValueError("title is required")
+    due_value = None
+    if due_at:
+        try:
+            due_value = datetime.fromisoformat(str(due_at).replace("Z", "+00:00")).replace(tzinfo=None)
+        except ValueError as exc:
+            raise ValueError("due_at must be an ISO date/time") from exc
+    task = CrmTask(
+        contact_id=contact.id,
+        assigned_user=assigned_user,
+        title=clean_title,
+        due_at=due_value,
+        priority=str(priority or "normal").strip().lower()[:32] or "normal",
+    )
+    db.add(task)
+    db.flush()
+    create_activity(
+        db,
+        contact_id=contact.id,
+        related_type="follow_up",
+        related_id=task.id,
+        activity_type="follow_up.assigned",
+        title="Follow-up assigned",
+        body=clean_title,
+        actor_user=assigned_user,
+        metadata={"due_at": due_at, "priority": task.priority},
+    )
+    return task
+
+
+def mark_contact_resolved(db: Session, contact_id: str, actor_user: Optional[str] = None) -> Optional[dict[str, Any]]:
+    contact = db.query(CrmContact).filter(CrmContact.id == contact_id).first()
+    if not contact:
+        return None
+    contact.status = "resolved"
+    conversations = db.query(CrmConversation).filter(CrmConversation.contact_id == contact.id).all()
+    for conversation in conversations:
+        conversation.status = "resolved"
+        conversation.unread_count = 0
+    create_activity(
+        db,
+        contact_id=contact.id,
+        related_type="resolution",
+        activity_type="review.resolved",
+        title="Conversation marked resolved",
+        actor_user=actor_user,
+    )
+    return {"contact": contact, "conversations_closed": len(conversations)}
+
+
+def assistant_suggestions(db: Session, contact_id: str) -> Optional[dict[str, Any]]:
+    contact = db.query(CrmContact).filter(CrmContact.id == contact_id).first()
+    if not contact:
+        return None
+    timeline = list_timeline(db, contact_id)
+    recent_text = " ".join(str(item.get("body") or "") for item in timeline[:8]).strip()
+    lower_text = recent_text.lower()
+    urgent_terms = ["urgent", "asap", "emergency", "today", "missed your call", "confused", "not sure"]
+    is_urgent = any(term in lower_text for term in urgent_terms)
+    if any(term in lower_text for term in ["proposal", "quote", "estimate", "price"]):
+        intent = "proposal_request"
+        next_action = "start_proposal_or_follow_up"
+        draft = (
+            "Thanks for reaching out. I saw your message about the proposal. "
+            "I can help without making this a long back-and-forth. "
+            "Next, I will confirm the details and send the proposal or the one missing question."
+        )
+    elif any(term in lower_text for term in ["appointment", "schedule", "call", "available"]):
+        intent = "scheduling"
+        next_action = "confirm_availability"
+        draft = (
+            "Thanks, I saw your scheduling request. "
+            "We can keep this simple. "
+            "Next, send the day and time window that works best and I will confirm availability."
+        )
+    else:
+        intent = "general_service_request"
+        next_action = "reply_and_clarify_need"
+        draft = (
+            "Thanks for the message. I saw what you sent and can help. "
+            "This should be quick to sort out. "
+            "Next, send a few details about what you need and I will point you to the right next step."
+        )
+    flags = []
+    if is_urgent:
+        flags.append("urgent_or_confusing")
+    if "?" in recent_text and len(recent_text) < 40:
+        flags.append("needs_clarification")
+    summary = recent_text[:220] if recent_text else "No recent communication yet."
+    return {
+        "contact_id": contact.id,
+        "intent": intent,
+        "summary": summary,
+        "draft_reply": draft,
+        "suggested_next_action": next_action,
+        "flags": flags,
+        "needs_human_review": bool(flags),
+    }
+
+
+def create_draft_reply(db: Session, contact_id: str, actor_user: Optional[str] = None) -> Optional[CrmActivity]:
+    suggestions = assistant_suggestions(db, contact_id)
+    if not suggestions:
+        return None
+    return create_activity(
+        db,
+        contact_id=contact_id,
+        related_type="review",
+        activity_type="assistant.draft_reply",
+        title="Draft reply ready for review",
+        body=suggestions["draft_reply"],
+        actor_user=actor_user,
+        metadata={
+            "intent": suggestions["intent"],
+            "summary": suggestions["summary"],
+            "suggested_next_action": suggestions["suggested_next_action"],
+            "flags": suggestions["flags"],
+            "status": "draft",
+        },
+    )
+
+
+def update_review_activity(
+    db: Session,
+    activity_id: str,
+    status_value: str,
+    body: Optional[str] = None,
+    actor_user: Optional[str] = None,
+) -> Optional[CrmActivity]:
+    activity = db.query(CrmActivity).filter(CrmActivity.id == activity_id).first()
+    if not activity:
+        return None
+    metadata = safe_json(activity.metadata_json)
+    metadata["status"] = str(status_value or "reviewed").strip().lower() or "reviewed"
+    if actor_user:
+        metadata["reviewed_by"] = actor_user
+    activity.metadata_json = json.dumps(metadata)
+    if body is not None:
+        clean_body = str(body).strip()
+        if clean_body:
+            activity.body = clean_body
+    return activity
+
+
+def approve_and_send_draft(db: Session, activity_id: str, actor_user: Optional[str] = None) -> Optional[dict[str, Any]]:
+    activity = update_review_activity(db, activity_id, "approved", actor_user=actor_user)
+    if not activity:
+        return None
+    message = store_outbound_reply(db, activity.contact_id, activity.body or "")
+    if not message:
+        return None
+    metadata = safe_json(activity.metadata_json)
+    metadata["sent_message_id"] = message.id
+    activity.metadata_json = json.dumps(metadata)
+    return {"activity": activity, "message": message}
 
 
 def start_quote_from_contact(db: Session, contact_id: str) -> Optional[dict[str, Any]]:

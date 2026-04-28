@@ -272,6 +272,21 @@ small { color: var(--muted); }
   display: grid;
   gap: 10px;
 }
+.assistant-card {
+  display: grid;
+  gap: 8px;
+  border: 1px solid #bfd8cf;
+  border-radius: 8px;
+  background: #f4fbf8;
+  padding: 12px;
+}
+.assistant-card p {
+  color: var(--muted);
+}
+.assistant-card small {
+  font-weight: 800;
+  text-transform: capitalize;
+}
 .timeline-item {
   position: relative;
   display: grid;

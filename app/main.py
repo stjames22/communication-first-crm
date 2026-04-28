@@ -342,6 +342,115 @@ def communication_crm_inbound_message(payload: dict = Body(...), db: Session = D
         "status": "received",
         "contact_id": result["contact"].id,
         "message_id": result["message"].id,
+        "match_type": result["resolution"]["match_type"],
+        "duplicate_warning": result["resolution"]["duplicate_warning"],
+    }
+
+
+@app.post("/api/webhooks/sms")
+def communication_crm_sms_webhook(payload: dict = Body(...), db: Session = Depends(get_db)) -> dict:
+    try:
+        result = crm_service.store_provider_inbound_message(
+            db,
+            payload,
+            provider=str(payload.get("provider") or "sms"),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    db.commit()
+    return {
+        "status": "received",
+        "provider": result["provider"],
+        "contact_id": result["contact"].id,
+        "message_id": result["message"].id,
+        "match_type": result["resolution"]["match_type"],
+        "duplicate_warning": result["resolution"]["duplicate_warning"],
+    }
+
+
+@app.post("/api/webhooks/calls")
+def communication_crm_call_webhook(payload: dict = Body(...), db: Session = Depends(get_db)) -> dict:
+    try:
+        result = crm_service.store_call_event(
+            db,
+            payload,
+            provider=str(payload.get("provider") or "phone"),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    db.commit()
+    return {
+        "status": "logged",
+        "contact_id": result["contact"].id,
+        "call_id": result["call"].id,
+        "activity_id": result["activity"].id,
+        "match_type": result["resolution"]["match_type"],
+        "duplicate_warning": result["resolution"]["duplicate_warning"],
+    }
+
+
+@app.post("/api/manual-message")
+def communication_crm_manual_message(payload: dict = Body(...), db: Session = Depends(get_db)) -> dict:
+    direction = str(payload.get("direction") or "inbound").strip().lower()
+    if direction not in {"inbound", "outbound"}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="direction must be inbound or outbound")
+    if direction == "inbound":
+        try:
+            result = crm_service.store_inbound_message(
+                db,
+                phone=payload.get("phone"),
+                name=payload.get("name"),
+                email=payload.get("email"),
+                message=str(payload.get("message") or payload.get("body") or ""),
+                channel=payload.get("channel") or "manual",
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+        db.commit()
+        return {
+            "status": "received",
+            "contact_id": result["contact"].id,
+            "message_id": result["message"].id,
+            "match_type": result["resolution"]["match_type"],
+            "duplicate_warning": result["resolution"]["duplicate_warning"],
+        }
+
+    contact_id = str(payload.get("contact_id") or "").strip()
+    if not contact_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="contact_id is required")
+    try:
+        message = crm_service.store_outbound_reply(
+            db,
+            contact_id=contact_id,
+            message=str(payload.get("message") or payload.get("body") or ""),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    if not message:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contact not found")
+    db.commit()
+    return {"status": "sent", "contact_id": contact_id, "message_id": message.id}
+
+
+@app.post("/api/contacts/resolve")
+def communication_crm_resolve_contact(payload: dict = Body(...), db: Session = Depends(get_db)) -> dict:
+    try:
+        result = crm_service.resolve_contact_details(
+            db,
+            phone=payload.get("phone"),
+            name=payload.get("name"),
+            email=payload.get("email"),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    db.commit()
+    return {
+        "contact": crm_service.serialize_contact(result["contact"]),
+        "match_type": result["match_type"],
+        "normalized": result["normalized"],
+        "duplicate_warning": result["duplicate_warning"],
+        "warnings": result["warnings"],
+        "duplicate_candidates": result["duplicate_candidates"],
     }
 
 
@@ -372,6 +481,79 @@ def communication_crm_start_quote(contact_id: str, db: Session = Depends(get_db)
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contact not found")
     db.commit()
     return result
+
+
+@app.get("/api/contacts/{contact_id}/assistant")
+def communication_crm_assistant(contact_id: str, db: Session = Depends(get_db)) -> dict:
+    result = crm_service.assistant_suggestions(db, contact_id)
+    if not result:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contact not found")
+    return result
+
+
+@app.post("/api/contacts/{contact_id}/draft-reply")
+def communication_crm_draft_reply(contact_id: str, payload: dict = Body(default={}), db: Session = Depends(get_db)) -> dict:
+    activity = crm_service.create_draft_reply(db, contact_id, actor_user=payload.get("actor_user"))
+    if not activity:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contact not found")
+    db.commit()
+    return {"status": "drafted", "activity": crm_service.serialize_activity(activity)}
+
+
+@app.post("/api/contacts/{contact_id}/follow-ups")
+def communication_crm_assign_follow_up(contact_id: str, payload: dict = Body(...), db: Session = Depends(get_db)) -> dict:
+    try:
+        task = crm_service.assign_follow_up(
+            db,
+            contact_id,
+            title=str(payload.get("title") or ""),
+            due_at=payload.get("due_at"),
+            assigned_user=payload.get("assigned_user"),
+            priority=str(payload.get("priority") or "normal"),
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    if not task:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contact not found")
+    db.commit()
+    return {"status": "assigned", "task": crm_service.serialize_task(task)}
+
+
+@app.post("/api/contacts/{contact_id}/resolve")
+def communication_crm_mark_resolved(contact_id: str, payload: dict = Body(default={}), db: Session = Depends(get_db)) -> dict:
+    result = crm_service.mark_contact_resolved(db, contact_id, actor_user=payload.get("actor_user"))
+    if not result:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contact not found")
+    db.commit()
+    return {"status": "resolved", "contact_id": result["contact"].id, "conversations_closed": result["conversations_closed"]}
+
+
+@app.patch("/api/review/{activity_id}")
+def communication_crm_review(activity_id: str, payload: dict = Body(...), db: Session = Depends(get_db)) -> dict:
+    activity = crm_service.update_review_activity(
+        db,
+        activity_id,
+        status_value=str(payload.get("status") or "reviewed"),
+        body=payload.get("body"),
+        actor_user=payload.get("actor_user"),
+    )
+    if not activity:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Review item not found")
+    db.commit()
+    return {"status": "updated", "activity": crm_service.serialize_activity(activity)}
+
+
+@app.post("/api/review/{activity_id}/approve-send")
+def communication_crm_approve_send(activity_id: str, payload: dict = Body(default={}), db: Session = Depends(get_db)) -> dict:
+    result = crm_service.approve_and_send_draft(db, activity_id, actor_user=payload.get("actor_user"))
+    if not result:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Review item not found")
+    db.commit()
+    return {
+        "status": "sent",
+        "activity": crm_service.serialize_activity(result["activity"]),
+        "message_id": result["message"].id,
+    }
 
 
 @app.post("/api/reply")

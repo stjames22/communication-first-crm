@@ -9,6 +9,7 @@ const state = {
   selectedConversationId: null,
   selectedContactId: null,
   contactDetail: null,
+  assistant: null,
   activeView: "dashboard"
 };
 
@@ -45,7 +46,7 @@ async function loadAll() {
     state.selectedContactId = state.conversation?.contact?.id || state.selectedContactId;
   }
   if (state.selectedContactId) {
-    state.contactDetail = await getJson(`/crm/api/contacts/${state.selectedContactId}`);
+    await selectContact(state.selectedContactId);
   }
   render();
 }
@@ -228,7 +229,12 @@ async function selectConversation(conversationId, contactId) {
 async function selectContact(contactId) {
   if (!contactId) return;
   state.selectedContactId = contactId;
-  state.contactDetail = await getJson(`/crm/api/contacts/${state.selectedContactId}`);
+  const [detail, assistant] = await Promise.all([
+    getJson(`/crm/api/contacts/${state.selectedContactId}`),
+    getJson(`/crm/api/contacts/${state.selectedContactId}/assistant`)
+  ]);
+  state.contactDetail = detail;
+  state.assistant = assistant;
 }
 
 async function handleAction(action) {
@@ -242,6 +248,18 @@ async function handleAction(action) {
   }
   if (action === "quote") {
     await startQuoteFromSelectedContact();
+    return;
+  }
+  if (action === "draft") {
+    await draftReplyForSelectedContact();
+    return;
+  }
+  if (action === "followup") {
+    await assignFollowUpForSelectedContact();
+    return;
+  }
+  if (action === "resolve") {
+    await resolveSelectedContact();
     return;
   }
   if (action === "close-note") {
@@ -268,6 +286,29 @@ async function startQuoteFromSelectedContact() {
   window.location.href = result.quote_url;
 }
 
+async function draftReplyForSelectedContact() {
+  if (!state.selectedContactId) return;
+  await postJson(`/crm/api/contacts/${state.selectedContactId}/draft-reply`, {});
+  await refreshContact();
+  toast("Draft reply added for review.");
+}
+
+async function assignFollowUpForSelectedContact() {
+  if (!state.selectedContactId) return;
+  const title = window.prompt("Follow-up title", "Follow up with customer");
+  if (!title) return;
+  await postJson(`/crm/api/contacts/${state.selectedContactId}/follow-ups`, { title, priority: "normal" });
+  await loadAll();
+  toast("Follow-up assigned.");
+}
+
+async function resolveSelectedContact() {
+  if (!state.selectedContactId) return;
+  await postJson(`/crm/api/contacts/${state.selectedContactId}/resolve`, {});
+  await loadAll();
+  toast("Conversation marked resolved.");
+}
+
 function openNoteModal() {
   if (!state.selectedContactId) return;
   $("#note-modal").classList.remove("hidden");
@@ -292,7 +333,7 @@ async function saveContactNote(event) {
 
 async function refreshContact() {
   if (state.selectedContactId) {
-    state.contactDetail = await getJson(`/crm/api/contacts/${state.selectedContactId}`);
+    await selectContact(state.selectedContactId);
   }
   if (state.selectedConversationId) {
     state.conversation = await getJson(`/crm/api/conversations/${state.selectedConversationId}`);
@@ -310,6 +351,7 @@ function renderContactPanel({ titleNode, detailNode, actionsNode, compact, sourc
   }
 
   const contact = detail.contact;
+  const assistant = state.assistant?.contact_id === contact.id ? state.assistant : null;
   if (titleNode) titleNode.textContent = contact.display_name || "Contact Timeline";
   if (actionsNode) actionsNode.classList.remove("hidden");
   const timeline = detail.timeline || [];
@@ -321,6 +363,16 @@ function renderContactPanel({ titleNode, detailNode, actionsNode, compact, sourc
         <span class="badge ${esc(contact.status)}">${esc(contact.status)}</span>
       </div>
       ${compact ? "" : `<p class="muted">${esc(site(contact.primary_site))}</p>`}
+      ${assistant ? `
+        <section class="assistant-card">
+          <div>
+            <strong>${esc(labelIntent(assistant.intent))}</strong>
+            <p>${esc(assistant.summary)}</p>
+          </div>
+          <p>${esc(assistant.draft_reply)}</p>
+          <small>${esc(assistant.suggested_next_action)}${assistant.flags?.length ? ` · ${esc(assistant.flags.join(", "))}` : ""}</small>
+        </section>
+      ` : ""}
       <div class="timeline">
         ${timeline.length ? timeline.map((item) => `
           <article class="timeline-item">
@@ -335,6 +387,10 @@ function renderContactPanel({ titleNode, detailNode, actionsNode, compact, sourc
       </div>
     </div>
   `;
+}
+
+function labelIntent(value) {
+  return String(value || "general").replaceAll("_", " ");
 }
 
 function rows(items, render, wrap = true) {
