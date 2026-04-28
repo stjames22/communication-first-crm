@@ -71,6 +71,9 @@ def crm_resolve_contact(payload: dict = Body(...), db: Session = Depends(get_db)
     return {
         "contact": crm_service.serialize_contact(result["contact"]),
         "match_type": result["match_type"],
+        "matched_existing_contact": result["matched_existing_contact"],
+        "priority": result["priority"],
+        "priority_score": result["priority_score"],
         "normalized": result["normalized"],
         "duplicate_warning": result["duplicate_warning"],
         "warnings": result["warnings"],
@@ -149,7 +152,11 @@ def crm_manual_message(payload: dict = Body(...), db: Session = Depends(get_db))
             "status": "received",
             "contact_id": result["contact"].id,
             "message_id": result["message"].id,
+            "matched_existing_contact": result["resolution"]["matched_existing_contact"],
             "match_type": result["resolution"]["match_type"],
+            "priority": result["resolution"]["priority"],
+            "priority_score": result["resolution"]["priority_score"],
+            "account_summary": result["account_summary"],
             "duplicate_warning": result["resolution"]["duplicate_warning"],
         }
 
@@ -178,7 +185,11 @@ def crm_sms_webhook(payload: dict = Body(...), db: Session = Depends(get_db)):
         "provider": result["provider"],
         "contact_id": result["contact"].id,
         "message_id": result["message"].id,
+        "matched_existing_contact": result["resolution"]["matched_existing_contact"],
         "match_type": result["resolution"]["match_type"],
+        "priority": result["resolution"]["priority"],
+        "priority_score": result["resolution"]["priority_score"],
+        "account_summary": result["account_summary"],
         "duplicate_warning": result["resolution"]["duplicate_warning"],
     }
 
@@ -195,7 +206,11 @@ def crm_call_webhook(payload: dict = Body(...), db: Session = Depends(get_db)):
         "contact_id": result["contact"].id,
         "call_id": result["call"].id,
         "activity_id": result["activity"].id,
+        "matched_existing_contact": result["resolution"]["matched_existing_contact"],
         "match_type": result["resolution"]["match_type"],
+        "priority": result["resolution"]["priority"],
+        "priority_score": result["resolution"]["priority_score"],
+        "account_summary": result["account_summary"],
         "duplicate_warning": result["resolution"]["duplicate_warning"],
     }
 

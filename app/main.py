@@ -321,6 +321,11 @@ def communication_crm_inbound(payload: dict = Body(...), db: Session = Depends(g
         "status": "received",
         "contact_id": result["contact"].id,
         "message_id": result["message"].id,
+        "matched_existing_contact": result["resolution"]["matched_existing_contact"],
+        "match_type": result["resolution"]["match_type"],
+        "priority": result["resolution"]["priority"],
+        "priority_score": result["resolution"]["priority_score"],
+        "account_summary": result["account_summary"],
     }
 
 
@@ -342,7 +347,11 @@ def communication_crm_inbound_message(payload: dict = Body(...), db: Session = D
         "status": "received",
         "contact_id": result["contact"].id,
         "message_id": result["message"].id,
+        "matched_existing_contact": result["resolution"]["matched_existing_contact"],
         "match_type": result["resolution"]["match_type"],
+        "priority": result["resolution"]["priority"],
+        "priority_score": result["resolution"]["priority_score"],
+        "account_summary": result["account_summary"],
         "duplicate_warning": result["resolution"]["duplicate_warning"],
     }
 
@@ -363,7 +372,11 @@ def communication_crm_sms_webhook(payload: dict = Body(...), db: Session = Depen
         "provider": result["provider"],
         "contact_id": result["contact"].id,
         "message_id": result["message"].id,
+        "matched_existing_contact": result["resolution"]["matched_existing_contact"],
         "match_type": result["resolution"]["match_type"],
+        "priority": result["resolution"]["priority"],
+        "priority_score": result["resolution"]["priority_score"],
+        "account_summary": result["account_summary"],
         "duplicate_warning": result["resolution"]["duplicate_warning"],
     }
 
@@ -384,7 +397,11 @@ def communication_crm_call_webhook(payload: dict = Body(...), db: Session = Depe
         "contact_id": result["contact"].id,
         "call_id": result["call"].id,
         "activity_id": result["activity"].id,
+        "matched_existing_contact": result["resolution"]["matched_existing_contact"],
         "match_type": result["resolution"]["match_type"],
+        "priority": result["resolution"]["priority"],
+        "priority_score": result["resolution"]["priority_score"],
+        "account_summary": result["account_summary"],
         "duplicate_warning": result["resolution"]["duplicate_warning"],
     }
 
@@ -411,7 +428,11 @@ def communication_crm_manual_message(payload: dict = Body(...), db: Session = De
             "status": "received",
             "contact_id": result["contact"].id,
             "message_id": result["message"].id,
+            "matched_existing_contact": result["resolution"]["matched_existing_contact"],
             "match_type": result["resolution"]["match_type"],
+            "priority": result["resolution"]["priority"],
+            "priority_score": result["resolution"]["priority_score"],
+            "account_summary": result["account_summary"],
             "duplicate_warning": result["resolution"]["duplicate_warning"],
         }
 

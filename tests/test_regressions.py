@@ -442,6 +442,80 @@ class BarkboysRegressionTests(unittest.TestCase):
         finally:
             main_module.app.dependency_overrides.pop(main_module.get_db, None)
 
+    def test_existing_contact_priority_and_account_summary(self) -> None:
+        def override_get_db():
+            db = self.SessionLocal()
+            try:
+                yield db
+            finally:
+                db.close()
+
+        main_module.app.dependency_overrides[main_module.get_db] = override_get_db
+        try:
+            client = TestClient(main_module.app)
+
+            first = client.post(
+                "/api/inbound-message",
+                json={
+                    "phone": "(503) 555-4141",
+                    "email": "priority@example.com",
+                    "name": "Priority Customer",
+                    "message": "Initial service question.",
+                    "channel": "sms",
+                },
+            )
+            self.assertEqual(first.status_code, 200)
+            contact_id = first.json()["contact_id"]
+            self.assertEqual(first.json()["priority_score"], 50)
+            self.assertFalse(first.json()["matched_existing_contact"])
+
+            later_new = client.post(
+                "/api/inbound-message",
+                json={
+                    "phone": "(503) 555-5151",
+                    "name": "Newer Unknown",
+                    "message": "New customer question.",
+                    "channel": "sms",
+                },
+            )
+            self.assertEqual(later_new.status_code, 200)
+            self.assertEqual(later_new.json()["priority_score"], 50)
+
+            matched = client.post(
+                "/api/inbound-message",
+                json={
+                    "phone": "503-555-4141",
+                    "name": "Priority Customer",
+                    "message": "Can you confirm timing?",
+                    "channel": "sms",
+                },
+            )
+            self.assertEqual(matched.status_code, 200)
+            matched_payload = matched.json()
+            self.assertEqual(matched_payload["contact_id"], contact_id)
+            self.assertTrue(matched_payload["matched_existing_contact"])
+            self.assertEqual(matched_payload["match_type"], "phone")
+            self.assertEqual(matched_payload["priority"], "existing_contact")
+            self.assertEqual(matched_payload["priority_score"], 90)
+            self.assertEqual(matched_payload["account_summary"]["contact_id"], contact_id)
+            self.assertIn("Can you confirm timing?", matched_payload["account_summary"]["summary"])
+
+            with self.SessionLocal() as db:
+                self.assertEqual(
+                    db.query(CrmContact).filter(CrmContact.mobile_phone == "+15035554141").count(),
+                    1,
+                )
+
+            recent = client.get("/api/conversations/recent")
+            self.assertEqual(recent.status_code, 200)
+            recent_payload = recent.json()
+            self.assertGreaterEqual(len(recent_payload), 2)
+            self.assertEqual(recent_payload[0]["contact_id"], contact_id)
+            self.assertEqual(recent_payload[0]["priority_score"], 90)
+            self.assertIn("account_summary", recent_payload[0])
+        finally:
+            main_module.app.dependency_overrides.pop(main_module.get_db, None)
+
     def _estimator_const_source(self, const_name: str) -> str:
         html = self.ESTIMATOR_HTML_PATH.read_text()
         match = re.search(rf"const {re.escape(const_name)} = .*?;\n", html, re.S)

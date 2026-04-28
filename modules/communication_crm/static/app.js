@@ -72,8 +72,9 @@ function renderDashboard() {
   $("#recent-conversations").innerHTML = rows(state.conversations.slice(0, 6), (item) => `
     <article class="conversation-row ${item.contact_id === state.selectedContactId ? "active" : ""}" data-conversation="${esc(item.id)}" data-contact="${esc(item.contact_id)}">
       <div>
-        <strong>${esc(item.display_name)}</strong>
+        <strong>${esc(item.display_name)}${priorityBadge(item)}</strong>
         <p>${esc(item.last_message_body || "No messages yet")}</p>
+        ${item.account_summary?.summary ? `<p class="summary-preview">${esc(item.account_summary.summary)}</p>` : ""}
       </div>
       <div class="row-meta">
         ${item.unread_count ? `<span class="unread">${item.unread_count}</span>` : ""}
@@ -105,8 +106,9 @@ function renderInbox() {
   $("#conversations").innerHTML = rows(state.conversations, (item) => `
     <article class="conversation-row ${item.id === state.selectedConversationId ? "active" : ""}" data-conversation="${esc(item.id)}" data-contact="${esc(item.contact_id)}">
       <div>
-        <strong>${esc(item.display_name)}</strong>
+        <strong>${esc(item.display_name)}${priorityBadge(item)}</strong>
         <p>${esc(item.last_message_body || "No messages yet")}</p>
+        ${item.account_summary?.summary ? `<p class="summary-preview">${esc(item.account_summary.summary)}</p>` : ""}
       </div>
       <div class="row-meta">
         ${item.unread_count ? `<span class="unread">${item.unread_count}</span>` : ""}
@@ -351,6 +353,7 @@ function renderContactPanel({ titleNode, detailNode, actionsNode, compact, sourc
   }
 
   const contact = detail.contact;
+  const accountSummary = detail.account_summary;
   const assistant = state.assistant?.contact_id === contact.id ? state.assistant : null;
   if (titleNode) titleNode.textContent = contact.display_name || "Contact Timeline";
   if (actionsNode) actionsNode.classList.remove("hidden");
@@ -363,6 +366,13 @@ function renderContactPanel({ titleNode, detailNode, actionsNode, compact, sourc
         <span class="badge ${esc(contact.status)}">${esc(contact.status)}</span>
       </div>
       ${compact ? "" : `<p class="muted">${esc(site(contact.primary_site))}</p>`}
+      ${accountSummary ? `
+        <section class="account-summary-card">
+          <strong>Account Summary ${priorityBadge(accountSummary)}</strong>
+          <p>${esc(accountSummary.summary || "")}</p>
+          <small>${esc(accountSummary.recommended_next_action || "")}</small>
+        </section>
+      ` : ""}
       ${assistant ? `
         <section class="assistant-card">
           <div>
@@ -391,6 +401,11 @@ function renderContactPanel({ titleNode, detailNode, actionsNode, compact, sourc
 
 function labelIntent(value) {
   return String(value || "general").replaceAll("_", " ");
+}
+
+function priorityBadge(item) {
+  if (!item?.priority || item.priority === "new_contact") return "";
+  return ` <span class="priority-badge">${esc(item.priority_score || "")}</span>`;
 }
 
 function rows(items, render, wrap = true) {

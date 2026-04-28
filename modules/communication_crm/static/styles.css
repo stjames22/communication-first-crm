@@ -186,6 +186,21 @@ small { color: var(--muted); }
   color: var(--muted);
   margin-top: 4px;
 }
+.summary-preview {
+  font-size: .86rem;
+  line-height: 1.35;
+}
+.priority-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 2px 7px;
+  margin-left: 6px;
+  background: #fff4d6;
+  color: var(--gold);
+  font-size: .72rem;
+  font-weight: 900;
+}
 .row-meta {
   display: flex;
   flex-direction: column;
@@ -279,6 +294,17 @@ small { color: var(--muted); }
   border-radius: 8px;
   background: #f4fbf8;
   padding: 12px;
+}
+.account-summary-card {
+  display: grid;
+  gap: 7px;
+  border: 1px solid #d8e0ea;
+  border-radius: 8px;
+  background: #fbfcfe;
+  padding: 12px;
+}
+.account-summary-card p {
+  color: var(--muted);
 }
 .assistant-card p {
   color: var(--muted);

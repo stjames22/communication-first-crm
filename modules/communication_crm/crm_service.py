@@ -195,10 +195,14 @@ def resolve_contact_details(
     warnings = []
     if duplicate_candidates:
         warnings.append("possible_duplicate")
+    priority = priority_for_match(match_type)
 
     return {
         "contact": contact,
         "match_type": match_type,
+        "matched_existing_contact": match_type != "created",
+        "priority": priority["priority"],
+        "priority_score": priority["priority_score"],
         "normalized": {
             "phone": normalized_phone,
             "email": normalized_email,
@@ -208,6 +212,14 @@ def resolve_contact_details(
         "warnings": warnings,
         "duplicate_candidates": [serialize_contact(candidate) for candidate in duplicate_candidates],
     }
+
+
+def priority_for_match(match_type: Optional[str]) -> dict[str, Any]:
+    if match_type in {"phone", "provider_message_id", "provider_call_id"}:
+        return {"priority": "existing_contact", "priority_score": 90}
+    if match_type in {"email", "name", "fuzzy_name"}:
+        return {"priority": "matched_contact", "priority_score": 75}
+    return {"priority": "new_contact", "priority_score": 50}
 
 
 def resolve_contact(
@@ -265,6 +277,91 @@ def has_auto_first_message(db: Session, contact_id: str) -> bool:
         .first()
         is not None
     )
+
+
+def latest_inbound_message(db: Session, contact_id: str) -> Optional[CrmMessage]:
+    return (
+        db.query(CrmMessage)
+        .filter(CrmMessage.contact_id == contact_id, CrmMessage.direction == "inbound")
+        .order_by(desc(CrmMessage.created_at), desc(CrmMessage.id))
+        .first()
+    )
+
+
+def build_account_summary(
+    db: Session,
+    contact_id: str,
+    match_type: Optional[str] = None,
+    priority: Optional[str] = None,
+    priority_score: Optional[int] = None,
+) -> dict[str, Any]:
+    contact = db.query(CrmContact).filter(CrmContact.id == contact_id).first()
+    if not contact:
+        return {}
+    resolved_match_type = match_type or "created"
+    priority_info = priority_for_match(resolved_match_type)
+    resolved_priority = priority or priority_info["priority"]
+    resolved_score = priority_score if priority_score is not None else priority_info["priority_score"]
+    latest_activity = (
+        db.query(CrmActivity)
+        .filter(CrmActivity.contact_id == contact_id)
+        .order_by(desc(CrmActivity.created_at), desc(CrmActivity.id))
+        .first()
+    )
+    inbound = latest_inbound_message(db, contact_id)
+    open_followups = (
+        db.query(CrmTask)
+        .filter(CrmTask.contact_id == contact_id, CrmTask.status != "completed")
+        .order_by(CrmTask.due_at, desc(CrmTask.created_at))
+        .limit(3)
+        .all()
+    )
+    quote_activity = (
+        db.query(CrmActivity)
+        .filter(CrmActivity.contact_id == contact_id, CrmActivity.activity_type.like("quote.%"))
+        .order_by(desc(CrmActivity.created_at))
+        .limit(3)
+        .all()
+    )
+    notes = (
+        db.query(CrmActivity)
+        .filter(CrmActivity.contact_id == contact_id, CrmActivity.activity_type == "note.added")
+        .order_by(desc(CrmActivity.created_at))
+        .limit(3)
+        .all()
+    )
+    assistant = assistant_suggestions(db, contact_id) or {}
+    flags = assistant.get("flags") or []
+    latest_message = inbound.body if inbound else ""
+    followup_title = open_followups[0].title if open_followups else None
+    last_contact = latest_activity.created_at.strftime("%b %-d") if latest_activity and latest_activity.created_at else "none"
+    parts = [
+        "Existing customer." if resolved_priority in {"existing_contact", "matched_contact"} else "New contact.",
+        f"Last contact: {last_contact}.",
+    ]
+    if followup_title:
+        parts.append(f"Open follow-up: {followup_title}.")
+    if latest_message:
+        parts.append(f"Latest message: {latest_message[:120]}.")
+    if quote_activity:
+        parts.append(f"Proposal activity: {quote_activity[0].title}.")
+    return {
+        "contact_id": contact.id,
+        "contact_name": contact.display_name,
+        "phone": contact.mobile_phone,
+        "email": contact.email,
+        "match_type": resolved_match_type,
+        "priority": resolved_priority,
+        "priority_score": resolved_score,
+        "last_interaction_date": latest_activity.created_at.isoformat() if latest_activity and latest_activity.created_at else None,
+        "latest_inbound_message": latest_message or None,
+        "open_followups": [serialize_task(task) for task in open_followups],
+        "proposal_activity": [serialize_activity(activity) for activity in quote_activity],
+        "unresolved_notes": [serialize_activity(note) for note in notes],
+        "urgency_flags": flags,
+        "summary": " ".join(parts),
+        "recommended_next_action": "Review timeline and draft a response.",
+    }
 
 
 def first_message_context(message: str, channel: Optional[str] = None) -> Optional[str]:
@@ -339,6 +436,8 @@ def store_inbound_message(
     created_at = datetime.utcnow()
     channel_value = str(channel or "sms").strip().lower() or "sms"
     conversation = get_or_create_conversation(db, contact.id, channel=channel_value)
+    if resolution["priority"] == "existing_contact":
+        conversation.status = "priority"
     crm_message = CrmMessage(
         conversation_id=conversation.id,
         contact_id=contact.id,
@@ -364,6 +463,9 @@ def store_inbound_message(
             "channel": channel_value,
             "match_type": resolution["match_type"],
             "duplicate_warning": resolution["duplicate_warning"],
+            "matched_existing_contact": resolution["matched_existing_contact"],
+            "priority": resolution["priority"],
+            "priority_score": resolution["priority_score"],
         },
     )
     auto_first_message = None
@@ -377,11 +479,19 @@ def store_inbound_message(
         )
         if auto_first_message:
             conversation.last_message_at = auto_first_message.created_at or datetime.utcnow()
+    account_summary = build_account_summary(
+        db,
+        contact.id,
+        match_type=resolution["match_type"],
+        priority=resolution["priority"],
+        priority_score=resolution["priority_score"],
+    )
     return {
         "contact": contact,
         "message": crm_message,
         "resolution": resolution,
         "auto_first_message": auto_first_message,
+        "account_summary": account_summary,
     }
 
 
@@ -464,15 +574,26 @@ def store_provider_inbound_message(db: Session, payload: dict[str, Any], provide
         )
         if existing:
             contact = db.query(CrmContact).filter(CrmContact.id == existing.contact_id).first()
+            priority = priority_for_match("provider_message_id")
             return {
                 "contact": contact,
                 "message": existing,
                 "provider": normalized["provider"],
                 "resolution": {
                     "match_type": "provider_message_id",
+                    "matched_existing_contact": True,
+                    "priority": priority["priority"],
+                    "priority_score": priority["priority_score"],
                     "duplicate_warning": False,
                     "warnings": [],
                 },
+                "account_summary": build_account_summary(
+                    db,
+                    existing.contact_id,
+                    match_type="provider_message_id",
+                    priority=priority["priority"],
+                    priority_score=priority["priority_score"],
+                ),
             }
     result = store_inbound_message(
         db,
@@ -530,6 +651,7 @@ def store_call_event(db: Session, payload: dict[str, Any], provider: str = "gene
         )
         if existing:
             contact = db.query(CrmContact).filter(CrmContact.id == existing.contact_id).first()
+            priority = priority_for_match("provider_call_id")
             activity = (
                 db.query(CrmActivity)
                 .filter(CrmActivity.related_type == "call", CrmActivity.related_id == existing.id)
@@ -542,9 +664,19 @@ def store_call_event(db: Session, payload: dict[str, Any], provider: str = "gene
                 "activity": activity,
                 "resolution": {
                     "match_type": "provider_call_id",
+                    "matched_existing_contact": True,
+                    "priority": priority["priority"],
+                    "priority_score": priority["priority_score"],
                     "duplicate_warning": False,
                     "warnings": [],
                 },
+                "account_summary": build_account_summary(
+                    db,
+                    existing.contact_id,
+                    match_type="provider_call_id",
+                    priority=priority["priority"],
+                    priority_score=priority["priority_score"],
+                ),
             }
     resolution = resolve_contact_details(
         db,
@@ -554,6 +686,8 @@ def store_call_event(db: Session, payload: dict[str, Any], provider: str = "gene
     )
     contact = resolution["contact"]
     conversation = get_or_create_conversation(db, contact.id, channel="phone")
+    if resolution["priority"] == "existing_contact":
+        conversation.status = "priority"
     duration = None
     if normalized["duration_seconds"] not in (None, ""):
         try:
@@ -591,9 +725,19 @@ def store_call_event(db: Session, payload: dict[str, Any], provider: str = "gene
             "direction": normalized["direction"],
             "match_type": resolution["match_type"],
             "duplicate_warning": resolution["duplicate_warning"],
+            "matched_existing_contact": resolution["matched_existing_contact"],
+            "priority": resolution["priority"],
+            "priority_score": resolution["priority_score"],
         },
     )
-    return {"contact": contact, "call": call, "activity": activity, "resolution": resolution}
+    account_summary = build_account_summary(
+        db,
+        contact.id,
+        match_type=resolution["match_type"],
+        priority=resolution["priority"],
+        priority_score=resolution["priority_score"],
+    )
+    return {"contact": contact, "call": call, "activity": activity, "resolution": resolution, "account_summary": account_summary}
 
 
 def add_contact_note(db: Session, contact_id: str, body: str, actor_user: Optional[str] = None) -> Optional[CrmActivity]:
@@ -946,6 +1090,7 @@ def get_contact_detail(db: Session, contact_id: str) -> Optional[dict[str, Any]]
         "conversations": [serialize_conversation_summary(conversation) for conversation in contact.conversations],
         "quotes": [serialize_quote_summary(quote) for quote in contact.quotes],
         "tasks": [serialize_task(task) for task in contact.tasks],
+        "account_summary": build_account_summary(db, contact_id),
         "timeline": list_timeline(db, contact_id),
     }
 
@@ -985,6 +1130,24 @@ def list_timeline(db: Session, contact_id: str) -> list[dict[str, Any]]:
     return [serialize_activity(row) for row in rows]
 
 
+def latest_priority_metadata(db: Session, contact_id: str) -> dict[str, Any]:
+    activities = (
+        db.query(CrmActivity)
+        .filter(
+            CrmActivity.contact_id == contact_id,
+            CrmActivity.metadata_json.like('%"priority_score"%'),
+        )
+        .order_by(desc(CrmActivity.created_at))
+        .limit(20)
+        .all()
+    )
+    metadata_rows = [safe_json(activity.metadata_json) for activity in activities]
+    metadata_rows = [metadata for metadata in metadata_rows if metadata.get("priority_score") is not None]
+    if metadata_rows:
+        return max(metadata_rows, key=lambda metadata: int(metadata.get("priority_score") or 0))
+    return priority_for_match(None)
+
+
 def list_conversations(db: Session) -> list[dict[str, Any]]:
     conversations = (
         db.query(CrmConversation)
@@ -997,6 +1160,14 @@ def list_conversations(db: Session) -> list[dict[str, Any]]:
     for conversation in conversations:
         messages = sorted(conversation.messages, key=lambda item: item.created_at or datetime.min)
         last_message = messages[-1] if messages else None
+        priority_meta = latest_priority_metadata(db, conversation.contact_id)
+        summary = build_account_summary(
+            db,
+            conversation.contact_id,
+            match_type=priority_meta.get("match_type"),
+            priority=priority_meta.get("priority"),
+            priority_score=priority_meta.get("priority_score"),
+        )
         result.append(
             {
                 **serialize_conversation_summary(conversation),
@@ -1005,9 +1176,21 @@ def list_conversations(db: Session) -> list[dict[str, Any]]:
                 "email": conversation.contact.email,
                 "last_message_body": last_message.body if last_message else None,
                 "last_message_direction": last_message.direction if last_message else None,
+                "matched_existing_contact": summary.get("priority") in {"existing_contact", "matched_contact"},
+                "match_type": summary.get("match_type"),
+                "priority": summary.get("priority"),
+                "priority_score": summary.get("priority_score", 50),
+                "account_summary": summary,
             }
         )
-    return result
+    return sorted(
+        result,
+        key=lambda item: (
+            int(item.get("priority_score") or 0),
+            item.get("last_message_at") or "",
+        ),
+        reverse=True,
+    )
 
 
 def get_conversation_detail(db: Session, conversation_id: str) -> Optional[dict[str, Any]]:
