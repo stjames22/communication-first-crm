@@ -2,261 +2,294 @@ const state = {
   contacts: [],
   conversations: [],
   conversation: null,
+  contactDetail: null,
   quotes: [],
   calls: [],
   selectedConversationId: null,
   selectedContactId: null,
-  contactDetail: null,
-  activeView: "conversations"
+  loading: true,
+  error: null
 };
 
 const $ = (selector) => document.querySelector(selector);
-const $$ = (selector) => Array.from(document.querySelectorAll(selector));
 
 document.addEventListener("click", handleClick);
 $("#seed").addEventListener("click", seedDemo);
 $("#message-form").addEventListener("submit", sendMessage);
-$("#note-form").addEventListener("submit", saveContactNote);
 
 loadAll();
 
 async function loadAll() {
-  const [contacts, conversations, quotes, calls] = await Promise.all([
-    getJson("/crm/api/contacts"),
-    getJson("/crm/api/conversations"),
-    getJson("/crm/api/quotes"),
-    getJson("/crm/api/calls")
-  ]);
-
-  state.contacts = contacts;
-  state.conversations = conversations;
-  state.quotes = quotes;
-  state.calls = calls;
-  state.selectedConversationId ||= conversations[0]?.id || null;
-
-  if (state.selectedConversationId) {
-    await selectConversation(state.selectedConversationId);
-  } else {
-    state.conversation = null;
-    state.selectedContactId = contacts[0]?.id || null;
-    if (state.selectedContactId) await selectContact(state.selectedContactId);
-  }
-
+  state.loading = true;
+  state.error = null;
   render();
+
+  try {
+    const [contacts, conversations, quotes, calls] = await Promise.all([
+      getJson("/crm/api/contacts"),
+      getJson("/crm/api/conversations"),
+      getJson("/crm/api/quotes"),
+      getJson("/crm/api/calls")
+    ]);
+
+    state.contacts = contacts;
+    state.conversations = conversations;
+    state.quotes = quotes;
+    state.calls = calls;
+
+    if (!conversations.some((item) => item.id === state.selectedConversationId)) {
+      state.selectedConversationId = conversations[0]?.id || null;
+    }
+
+    if (state.selectedConversationId) {
+      await selectConversation(state.selectedConversationId, { renderAfter: false });
+    } else {
+      state.conversation = null;
+      state.contactDetail = null;
+      state.selectedContactId = null;
+    }
+  } catch (error) {
+    state.error = error.message || "Unable to load the communication inbox.";
+  } finally {
+    state.loading = false;
+    render();
+  }
 }
 
 function render() {
-  renderConversations();
-  renderContacts();
-  renderQuotes();
-  renderCalls();
-}
-
-function renderConversations() {
-  $("#conversation-list").innerHTML = rows(state.conversations, (item) => `
-    <article class="conversation-row ${item.id === state.selectedConversationId ? "active" : ""}" data-conversation="${esc(item.id)}" data-contact="${esc(item.contact_id)}">
-      <div>
-        <strong>${esc(item.display_name)}${priorityBadge(item)}</strong>
-        <p>${esc(item.last_message_body || "No messages yet")}</p>
-      </div>
-      <small>${fmt(item.last_message_at)}</small>
-    </article>
-  `, false);
-
-  const contact = state.contactDetail?.contact || state.conversation?.contact;
-  $("#active-contact-name").textContent = contact?.display_name || "Select a conversation";
-  $("#active-contact-meta").textContent = contact
-    ? [contact.mobile_phone, contact.email].filter(Boolean).join("  |  ") || "No phone or email"
-    : "Recent customer communication will appear here.";
-  $("#active-actions").classList.toggle("hidden", !contact);
-
-  renderAccountSummary();
+  renderInbox();
   renderThread();
+  renderSummary();
 }
 
-function renderAccountSummary() {
-  const summary = state.contactDetail?.account_summary;
-  const node = $("#account-summary");
-  if (!summary) {
-    node.classList.add("hidden");
-    node.innerHTML = "";
+function renderInbox() {
+  if (state.loading) {
+    $("#conversations").innerHTML = loadingRows("Loading conversations...");
+    return;
+  }
+  if (state.error) {
+    $("#conversations").innerHTML = `<article class="empty-state error">${esc(state.error)}</article>`;
+    return;
+  }
+  if (!state.conversations.length) {
+    $("#conversations").innerHTML = `
+      <article class="empty-state">
+        <strong>No conversations yet.</strong>
+        <p>Load demo data or wait for a call, text, or email to arrive.</p>
+      </article>
+    `;
     return;
   }
 
-  const followups = summary.open_followups || [];
-  node.classList.remove("hidden");
-  node.innerHTML = `
-    <div>
-      <strong>Account Summary ${priorityBadge(summary)}</strong>
-      <p>${esc(summary.summary || "No account history yet.")}</p>
-    </div>
-    <div class="summary-grid">
-      <span><b>Last</b>${summary.last_interaction_date ? fmt(summary.last_interaction_date) : "None"}</span>
-      <span><b>Follow-ups</b>${followups.length ? esc(followups[0].title) : "None open"}</span>
-      <span><b>Next</b>${esc(summary.recommended_next_action || "Review timeline and reply.")}</span>
-    </div>
-  `;
+  $("#conversations").innerHTML = state.conversations.map((item) => {
+    const active = item.id === state.selectedConversationId ? "active" : "";
+    const unread = Number(item.unread_count || 0);
+    const priority = priorityText(item);
+    return `
+      <article class="conversation-card ${active}" data-conversation="${esc(item.id)}" data-contact="${esc(item.contact_id || "")}">
+        <div class="conversation-topline">
+          <strong>${esc(item.display_name || "Unknown contact")}</strong>
+          <time>${esc(shortTime(item.last_message_at))}</time>
+        </div>
+        <p>${esc(item.last_message_body || "No messages yet")}</p>
+        <div class="conversation-footline">
+          <span class="channel-badge ${esc(channelClass(item.channel_type))}">${esc(channelLabel(item.channel_type))}</span>
+          ${unread ? `<span class="count-badge">${unread} unread</span>` : ""}
+          ${priority ? `<span class="priority-badge">${esc(priority)}</span>` : ""}
+        </div>
+      </article>
+    `;
+  }).join("");
 }
 
 function renderThread() {
-  const timeline = [...(state.contactDetail?.timeline || [])].reverse();
-  $("#thread").innerHTML = timeline.length
-    ? timeline.map(renderTimelineItem).join("")
-    : `<p class="empty-state">Select a conversation to view the thread.</p>`;
+  const detail = state.conversation;
+  const contact = state.contactDetail?.contact || detail?.contact;
+
+  $("#thread-title").textContent = contact?.display_name || "Conversation";
+  $("#thread-kicker").textContent = detail
+    ? channelLabel(detail.conversation?.channel_type)
+    : state.loading
+      ? "Loading"
+      : "Select a conversation";
+  $("#thread-meta").innerHTML = detail
+    ? `<span>${esc(contactPoint(contact))}</span><span>${esc(shortTime(detail.conversation?.last_message_at))}</span>`
+    : "";
+
+  if (state.loading) {
+    $("#thread").innerHTML = loadingRows("Loading thread...");
+    setComposerDisabled(true);
+    return;
+  }
+  if (state.error) {
+    $("#thread").innerHTML = `<article class="empty-state error">The thread could not load. Try refreshing the page.</article>`;
+    setComposerDisabled(true);
+    return;
+  }
+  if (!detail) {
+    $("#thread").innerHTML = `<article class="empty-state">Choose a conversation to see messages and reply.</article>`;
+    setComposerDisabled(true);
+    return;
+  }
+  if (!detail.messages.length) {
+    $("#thread").innerHTML = `<article class="empty-state">No messages in this conversation yet.</article>`;
+    setComposerDisabled(false);
+    return;
+  }
+
+  $("#thread").innerHTML = detail.messages.map((message) => `
+    <article class="message ${esc(message.direction)}">
+      <p>${esc(message.body)}</p>
+      <small>${esc(directionLabel(message.direction))} via ${esc(channelLabel(message.channel))} ${esc(fmt(message.created_at))}</small>
+    </article>
+  `).join("");
+  setComposerDisabled(false);
+  $("#thread").scrollTop = $("#thread").scrollHeight;
 }
 
-function renderTimelineItem(item) {
-  const kind = timelineKind(item);
-  const label = item.system_generated ? `<span class="auto-badge">Auto</span>` : "";
-  return `
-    <article class="thread-item ${esc(kind)} ${item.system_generated ? "system-generated" : ""}">
-      <div class="thread-bubble">
-        <div class="thread-meta">
-          <strong>${esc(threadTitle(item, kind))}${label}</strong>
-          <small>${fmt(item.created_at)}</small>
-        </div>
-        <p>${esc(item.body || item.title || "")}</p>
+function renderSummary() {
+  const detail = state.conversation;
+  const contact = state.contactDetail?.contact || detail?.contact;
+
+  if (state.loading) {
+    $("#summary").innerHTML = loadingRows("Loading contact context...");
+    return;
+  }
+  if (state.error) {
+    $("#summary").innerHTML = `<article class="empty-state error">Contact context is unavailable.</article>`;
+    return;
+  }
+  if (!detail) {
+    $("#summary").innerHTML = `<article class="empty-state">Select a conversation for contact details, recent activity, and the next best action.</article>`;
+    return;
+  }
+  if (!contact) {
+    $("#summary").innerHTML = `
+      <article class="empty-state">
+        <strong>Create contact from this conversation.</strong>
+        <p>No existing phone or email match is attached yet.</p>
+      </article>
+    `;
+    return;
+  }
+
+  const accountSummary = state.contactDetail?.account_summary;
+  const latestQuote = contact.latest_quote || findLatestQuote(contact.id);
+  const recentActivity = (state.contactDetail?.timeline || detail.timeline || []).slice(0, 4);
+  const nextAction = nextBestAction(contact, latestQuote, recentActivity, accountSummary);
+
+  $("#summary").innerHTML = `
+    <section class="summary-section contact-block">
+      <strong>${esc(contact.display_name)}</strong>
+      <p>${esc(contact.mobile_phone || "No phone on file")}</p>
+      <p>${esc(contact.email || "No email on file")}</p>
+      <p>${esc(site(contact.primary_site))}</p>
+    </section>
+
+    <section class="summary-section">
+      <h3>Status</h3>
+      <div class="status-grid">
+        <span>Customer</span>
+        <strong>${esc(titleCase(contact.status || "Unknown"))}</strong>
+        <span>Quote</span>
+        <strong>${esc(quoteStatus(latestQuote))}</strong>
       </div>
-    </article>
+    </section>
+
+    <section class="summary-section next-action">
+      <h3>Next Best Action</h3>
+      <p>${esc(nextAction)}</p>
+    </section>
+
+    <section class="summary-section">
+      <h3>Recent Activity</h3>
+      ${recentActivity.length ? recentActivity.map((item) => `
+        <article class="activity-item">
+          <strong>${esc(item.title)}${item.system_generated ? ` <span class="auto-badge">Auto</span>` : ""}</strong>
+          <p>${esc(item.body || activityType(item.activity_type))}</p>
+          <small>${esc(fmt(item.created_at))}</small>
+        </article>
+      `).join("") : `<p class="muted">No recent activity yet.</p>`}
+    </section>
   `;
 }
 
-function timelineKind(item) {
-  if (item.system_generated) return "system";
-  if (item.activity_type === "message.inbound") return "inbound";
-  if (item.activity_type === "message.outbound") return "outbound";
-  if (item.activity_type === "note.added") return "note";
-  return "system";
-}
-
-function threadTitle(item, kind) {
-  if (kind === "inbound") return "Customer";
-  if (kind === "outbound") return "Team";
-  if (kind === "note") return "Note";
-  return item.title || "System";
-}
-
-function renderContacts() {
-  $("#contact-list").innerHTML = rows(state.contacts, (item) => `
-    <article class="row clickable ${item.id === state.selectedContactId ? "active" : ""}" data-contact="${esc(item.id)}">
-      <strong>${esc(item.display_name)}</strong>
-      <p>${esc([item.mobile_phone, item.email].filter(Boolean).join("  |  "))}</p>
-      <span class="badge">${esc(item.status)}</span>
-    </article>
-  `, false);
-
-  const detail = state.contactDetail;
-  $("#contact-title").textContent = detail?.contact?.display_name || "Contact Detail";
-  $("#contact-detail").innerHTML = detail?.contact
-    ? `
-      <section class="account-summary-card">
-        <strong>Account Summary ${priorityBadge(detail.account_summary)}</strong>
-        <p>${esc(detail.account_summary?.summary || "No account history yet.")}</p>
-        <small>${esc(detail.account_summary?.recommended_next_action || "")}</small>
-      </section>
-      <div class="compact-timeline">
-        ${[...(detail.timeline || [])].slice(0, 12).map((item) => `
-          <article class="row">
-            <strong>${esc(item.title)}${item.system_generated ? ` <span class="auto-badge">Auto</span>` : ""}</strong>
-            <p>${esc(item.body || "")}</p>
-            <small>${fmt(item.created_at)}</small>
-          </article>
-        `).join("")}
-      </div>
-    `
-    : "<p>Select a contact.</p>";
-}
-
-function renderQuotes() {
-  $("#quote-list").innerHTML = rows(state.quotes, (item) => `
-    <strong>${esc(item.quote_number)} ${esc(item.title)}</strong>
-    <p>$${Number(item.grand_total || 0).toFixed(2)}</p>
-    <span class="badge">${esc(item.status)}</span>
-  `);
-}
-
-function renderCalls() {
-  $("#call-list").innerHTML = rows(state.calls, (item) => `
-    <strong>${esc(item.direction)} ${esc(item.status)}</strong>
-    <p>${esc(item.from_number)} to ${esc(item.to_number)}</p>
-    <small>${fmt(item.started_at)}</small>
-  `);
-}
-
 async function handleClick(event) {
-  const viewButton = event.target.closest("[data-view]");
-  if (viewButton) {
-    switchView(viewButton.dataset.view);
-    return;
-  }
-
-  const actionButton = event.target.closest("[data-action]");
-  if (actionButton) {
-    await handleAction(actionButton.dataset.action);
-    return;
-  }
-
   const conversation = event.target.closest("[data-conversation]");
   if (conversation) {
-    await selectConversation(conversation.dataset.conversation, conversation.dataset.contact);
-    render();
+    await selectConversation(conversation.dataset.conversation, { contactId: conversation.dataset.contact });
     return;
   }
 
-  const contact = event.target.closest("[data-contact]");
-  if (contact) {
-    await selectContact(contact.dataset.contact);
-    render();
+  const action = event.target.closest("[data-action]");
+  if (action) {
+    handleQuickAction(action.dataset.action);
   }
 }
 
-function switchView(view) {
-  state.activeView = view;
-  $$(".view").forEach((section) => section.classList.toggle("active", section.id === view));
-  $$("[data-view]").forEach((button) => button.classList.toggle("active", button.dataset.view === view));
+async function selectConversation(conversationId, options = {}) {
+  if (!conversationId) return;
+  state.selectedConversationId = conversationId;
+  state.conversation = null;
+  state.contactDetail = null;
+  if (options.renderAfter !== false) render();
+
+  try {
+    state.conversation = await getJson(`/crm/api/conversations/${state.selectedConversationId}`);
+    state.selectedContactId = options.contactId || state.conversation?.contact?.id || null;
+    if (state.selectedContactId) {
+      state.contactDetail = await getJson(`/crm/api/contacts/${state.selectedContactId}`);
+    }
+    state.conversations = state.conversations.map((item) =>
+      item.id === conversationId ? { ...item, unread_count: 0 } : item
+    );
+    state.error = null;
+  } catch (error) {
+    state.error = error.message || "Unable to load that conversation.";
+  }
+
+  if (options.renderAfter !== false) render();
+}
+
+function handleQuickAction(action) {
+  if (action === "send-text") {
+    $("#message-form input[name='body']").focus();
+    return;
+  }
+  const messages = {
+    "log-call": "Call logging is ready for the next backend action.",
+    "follow-up": "Follow-up creation is ready for the next backend action.",
+    quote: "Quote creation can stay linked through the estimator handoff."
+  };
+  toast(messages[action] || "Action unavailable.");
 }
 
 async function seedDemo() {
-  await postJson("/crm/api/dev/seed-demo", {});
-  state.selectedConversationId = null;
-  state.selectedContactId = null;
-  await loadAll();
-  toast("Demo conversations loaded.");
-}
-
-async function selectConversation(conversationId, contactId) {
-  if (!conversationId) return;
-  state.selectedConversationId = conversationId;
-  state.conversation = await getJson(`/crm/api/conversations/${conversationId}`);
-  await selectContact(contactId || state.conversation?.contact?.id);
-}
-
-async function selectContact(contactId) {
-  if (!contactId) return;
-  state.selectedContactId = contactId;
-  state.contactDetail = await getJson(`/crm/api/contacts/${contactId}`);
+  try {
+    await postJson("/crm/api/dev/seed-demo", {});
+    state.selectedConversationId = null;
+    state.selectedContactId = null;
+    toast("Demo conversations loaded.");
+    await loadAll();
+  } catch (error) {
+    toast(error.message || "Demo data could not be loaded.");
+  }
 }
 
 async function sendMessage(event) {
   event.preventDefault();
   const form = event.currentTarget;
   const body = new FormData(form).get("body");
-  if (!state.selectedConversationId || !body) return;
-  await postJson(`/crm/api/conversations/${state.selectedConversationId}/messages`, { body });
-  form.reset();
-  await refreshActiveConversation();
-  toast("Reply added.");
-}
+  if (!state.selectedConversationId || !String(body || "").trim()) return;
 
-async function saveContactNote(event) {
-  event.preventDefault();
-  const form = event.currentTarget;
-  const body = new FormData(form).get("body");
-  if (!state.selectedContactId || !body) return;
-  await postJson(`/crm/api/contacts/${state.selectedContactId}/notes`, { body });
-  form.reset();
-  await refreshActiveConversation();
-  toast("Note added.");
+  try {
+    await postJson(`/crm/api/conversations/${state.selectedConversationId}/messages`, { body });
+    form.reset();
+    await refreshActiveConversation();
+    toast("Reply added.");
+  } catch (error) {
+    toast(error.message || "Message could not be sent.");
+  }
 }
 
 async function refreshActiveConversation() {
@@ -271,54 +304,109 @@ async function refreshActiveConversation() {
   state.quotes = quotes;
   state.calls = calls;
   if (state.selectedConversationId) {
-    state.conversation = await getJson(`/crm/api/conversations/${state.selectedConversationId}`);
-  }
-  if (state.selectedContactId) {
-    state.contactDetail = await getJson(`/crm/api/contacts/${state.selectedContactId}`);
+    await selectConversation(state.selectedConversationId, { renderAfter: false });
   }
   render();
 }
 
-async function handleAction(action) {
-  if (action === "reply" || action === "text") {
-    $("#message-form input[name='body']").focus();
-    return;
-  }
-  if (action === "call") {
-    toast("Call action ready.");
-    return;
-  }
-  if (action === "email") {
-    const email = state.contactDetail?.contact?.email;
-    if (email) window.location.href = `mailto:${email}`;
-    else toast("No email on this contact.");
-    return;
-  }
-  if (action === "quote") {
-    await startQuoteFromSelectedContact();
-  }
+function setComposerDisabled(disabled) {
+  $("#message-form input").disabled = disabled;
+  $("#message-form button").disabled = disabled;
 }
 
-async function startQuoteFromSelectedContact() {
-  if (!state.selectedContactId) return;
-  const result = await postJson(`/api/contacts/${state.selectedContactId}/start-quote`, {});
-  toast("Proposal handoff ready.");
-  window.location.href = result.quote_url;
+function loadingRows(message) {
+  return `
+    <article class="empty-state loading">
+      <span class="loader"></span>
+      <p>${esc(message)}</p>
+    </article>
+  `;
 }
 
-function rows(items, render, wrap = true) {
-  if (!items.length) return "<p class=\"empty-state\">No records yet.</p>";
-  return items.map((item) => wrap ? `<article class="row">${render(item)}</article>` : render(item)).join("");
+function findLatestQuote(contactId) {
+  if (!contactId) return null;
+  return state.quotes.find((quote) => quote.contact_id === contactId) || null;
 }
 
-function priorityBadge(item) {
-  if (!item?.priority || item.priority === "new_contact") return "";
-  return ` <span class="priority-badge">${esc(item.priority_score || "")}</span>`;
+function nextBestAction(contact, latestQuote, recentActivity, accountSummary) {
+  if (accountSummary?.recommended_next_action) return accountSummary.recommended_next_action;
+  const unread = state.conversations.find((item) => item.contact_id === contact.id)?.unread_count;
+  if (unread) return "Reply to the unread message before anything else.";
+  if (latestQuote && ["sent", "awaiting_follow_up", "draft"].includes(latestQuote.status)) {
+    return "Follow up on the active quote.";
+  }
+  if (recentActivity.some((item) => item.activity_type === "call.missed")) {
+    return "Return the missed call and log the outcome.";
+  }
+  if (!contact.email || !contact.mobile_phone) {
+    return "Complete the contact details before creating new work.";
+  }
+  return "Keep the conversation moving with a clear next step.";
+}
+
+function priorityText(item) {
+  if (item.priority && item.priority !== "new_contact") {
+    return item.priority_score ? `Priority ${item.priority_score}` : "Priority";
+  }
+  const text = `${item.status || ""} ${item.last_message_body || ""}`.toLowerCase();
+  if (text.includes("missed") || text.includes("urgent") || text.includes("quote")) return "Priority";
+  return "";
+}
+
+function channelLabel(value) {
+  const normalized = String(value || "sms").toLowerCase();
+  if (normalized.includes("email")) return "Email";
+  if (normalized.includes("call") || normalized.includes("voice")) return "Call";
+  return "SMS";
+}
+
+function channelClass(value) {
+  return channelLabel(value).toLowerCase();
+}
+
+function directionLabel(value) {
+  return String(value || "").toLowerCase() === "outbound" ? "Sent" : "Received";
+}
+
+function quoteStatus(quote) {
+  if (!quote) return "No linked quote";
+  const total = Number(quote.grand_total || 0).toFixed(2);
+  return `${titleCase(quote.status)} - $${total}`;
+}
+
+function contactPoint(contact) {
+  return contact?.mobile_phone || contact?.email || "No contact point";
+}
+
+function activityType(value) {
+  return titleCase(String(value || "activity").replace(/[._-]/g, " "));
+}
+
+function site(value) {
+  if (!value) return "No service site";
+  return [value.address_line_1, value.city, value.state, value.zip].filter(Boolean).join(", ");
 }
 
 function fmt(value) {
   if (!value) return "";
   return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(value));
+}
+
+function shortTime(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  const now = new Date();
+  const sameDay = date.toDateString() === now.toDateString();
+  return new Intl.DateTimeFormat(undefined, sameDay
+    ? { hour: "numeric", minute: "2-digit" }
+    : { month: "short", day: "numeric" }
+  ).format(date);
+}
+
+function titleCase(value) {
+  return String(value || "")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 async function getJson(url) {

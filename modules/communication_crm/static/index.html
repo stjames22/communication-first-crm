@@ -7,85 +7,57 @@
   <link rel="stylesheet" href="/crm/static/styles.css" />
 </head>
 <body>
-  <header class="topbar">
-    <strong>Communication First CRM</strong>
-    <nav>
-      <button data-view="conversations" class="active">Conversations</button>
-      <button data-view="contacts">Contacts</button>
-      <button data-view="calls">Calls</button>
-      <button data-view="quotes">Proposals</button>
-    </nav>
-  </header>
-
-  <main>
-    <section id="conversations" class="view active">
-      <div class="inbox-shell">
-        <aside class="conversation-list-panel">
-          <div class="panel-heading">
-            <h1>Conversations</h1>
-            <button id="seed" type="button">Load Demo</button>
-          </div>
-          <div id="conversation-list"></div>
-        </aside>
-
-        <section class="active-conversation-panel">
-          <header class="contact-header">
-            <div>
-              <h2 id="active-contact-name">Select a conversation</h2>
-              <p id="active-contact-meta">Recent customer communication will appear here.</p>
-            </div>
-            <div id="active-actions" class="contact-actions hidden">
-              <button data-action="call" type="button">Call</button>
-              <button data-action="reply" type="button">Text</button>
-              <button data-action="email" type="button">Email</button>
-              <button data-action="quote" class="primary" type="button">Start Proposal</button>
-            </div>
-          </header>
-
-          <section id="account-summary" class="account-summary-card hidden"></section>
-
-          <section id="thread" class="thread-list"></section>
-
-          <footer class="composer">
-            <form id="message-form" class="reply-form">
-              <input name="body" placeholder="Write a reply" />
-              <button class="primary" type="submit">Send</button>
-            </form>
-            <form id="note-form" class="note-form">
-              <textarea name="body" rows="2" placeholder="Add an internal note"></textarea>
-              <button type="submit">Add Note</button>
-            </form>
-          </footer>
-        </section>
+  <main class="app-shell">
+    <section class="inbox-pane" aria-label="Unified inbox">
+      <header class="pane-header">
+        <div>
+          <p class="eyebrow">Communication First CRM</p>
+          <h1>Inbox</h1>
+        </div>
+        <button id="seed" class="ghost-button" type="button">Demo Data</button>
+      </header>
+      <div id="conversations" class="conversation-list" aria-live="polite">
+        <article class="empty-state">Loading conversations...</article>
       </div>
     </section>
 
-    <section id="contacts" class="view">
-      <div class="simple-list-view">
-        <section class="list-card">
-          <h1>Contacts</h1>
-          <div id="contact-list"></div>
-        </section>
-        <section class="list-card">
-          <h2 id="contact-title">Contact Detail</h2>
-          <div id="contact-detail"></div>
-        </section>
+    <section class="thread-pane" aria-label="Active conversation">
+      <header class="thread-header">
+        <div>
+          <p id="thread-kicker" class="eyebrow">Select a conversation</p>
+          <h2 id="thread-title">Conversation</h2>
+        </div>
+        <div id="thread-meta" class="thread-meta"></div>
+      </header>
+
+      <div id="thread" class="thread" aria-live="polite">
+        <article class="empty-state">Choose a conversation to see the thread.</article>
       </div>
+
+      <div class="quick-actions" aria-label="Quick actions">
+        <button type="button" data-action="send-text">Send Text</button>
+        <button type="button" data-action="log-call">Log Call</button>
+        <button type="button" data-action="follow-up">Create Follow-up</button>
+        <button type="button" data-action="quote">Create Quote</button>
+      </div>
+
+      <form id="message-form" class="composer">
+        <input name="body" autocomplete="off" placeholder="Type a text reply..." />
+        <button type="submit">Send</button>
+      </form>
     </section>
 
-    <section id="calls" class="view">
-      <section class="list-card">
-        <h1>Calls</h1>
-        <div id="call-list"></div>
-      </section>
-    </section>
-
-    <section id="quotes" class="view">
-      <section class="list-card">
-        <h1>Proposals</h1>
-        <div id="quote-list"></div>
-      </section>
-    </section>
+    <aside class="context-pane" aria-label="Contact and action panel">
+      <header class="pane-header compact">
+        <div>
+          <p class="eyebrow">Context</p>
+          <h2>Contact</h2>
+        </div>
+      </header>
+      <div id="summary" class="summary" aria-live="polite">
+        <article class="empty-state">Contact details appear here after selecting a conversation.</article>
+      </div>
+    </aside>
   </main>
 
   <div id="toast" class="toast hidden"></div>
