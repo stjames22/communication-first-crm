@@ -203,6 +203,28 @@ class CrmExternalLink(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 
+class CrmLeadSignal(Base):
+    __tablename__ = "crm_lead_signals"
+
+    id = Column(String(36), primary_key=True, default=_uuid)
+    source_type = Column(String(40), nullable=False, index=True)
+    source_url = Column(String(512), nullable=True)
+    area_location = Column(String(160), nullable=True)
+    raw_text = Column(Text, nullable=False)
+    lead_score = Column(Integer, nullable=False, default=0, index=True)
+    lead_type = Column(String(64), nullable=False, default="unknown", index=True)
+    urgency = Column(String(24), nullable=False, default="low", index=True)
+    location_detected = Column(String(160), nullable=True)
+    intent_summary = Column(Text, nullable=False)
+    suggested_reply = Column(Text, nullable=False)
+    recommended_action = Column(String(32), nullable=False, default="watch", index=True)
+    matched_keywords_json = Column(Text, nullable=False, default="[]")
+    status = Column(String(32), nullable=False, default="new", index=True)
+    attached_contact_id = Column(String(36), ForeignKey("crm_contacts.id", ondelete="SET NULL"), nullable=True, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+
 Index("crm_external_links_internal_idx", CrmExternalLink.internal_type, CrmExternalLink.internal_id)
 Index("crm_external_links_external_idx", CrmExternalLink.external_system, CrmExternalLink.external_id)
 
@@ -222,5 +244,6 @@ def create_crm_tables(bind) -> None:
             CrmActivity.__table__,
             CrmTask.__table__,
             CrmExternalLink.__table__,
+            CrmLeadSignal.__table__,
         ],
     )

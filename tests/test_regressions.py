@@ -59,7 +59,8 @@ from app.ai_photo_analysis import (
 )
 from app.storage import StorageManager
 from app.settings import Settings
-from modules.communication_crm.models import CrmContact, CrmMessage
+from modules.communication_crm import lead_monitor_service
+from modules.communication_crm.models import CrmActivity, CrmContact, CrmLeadSignal, CrmMessage
 
 
 class BarkboysRegressionTests(unittest.TestCase):
@@ -439,6 +440,116 @@ class BarkboysRegressionTests(unittest.TestCase):
             auto_items = [item for item in timeline.json() if item.get("system_generated")]
             self.assertEqual(len(auto_items), 1)
             self.assertEqual(auto_items[0]["metadata"]["auto_first_message"], True)
+        finally:
+            main_module.app.dependency_overrides.pop(main_module.get_db, None)
+
+    def test_lead_monitor_scores_insurance_intent(self) -> None:
+        analysis = lead_monitor_service.analyze_lead_signal(
+            {
+                "source_type": "facebook_group",
+                "area_location": "",
+                "raw_text": "Moving to Portland and need a recommendation for a broker. Need a home insurance quote this week.",
+            }
+        )
+
+        self.assertGreaterEqual(analysis["lead_score"], 70)
+        self.assertEqual(analysis["lead_type"], "home insurance")
+        self.assertEqual(analysis["urgency"], "high")
+        self.assertEqual(analysis["recommended_action"], "save lead")
+        self.assertIn("Portland", analysis["location_detected"])
+        self.assertIn("home insurance", analysis["matched_keywords"])
+
+    def test_lead_monitor_saves_lead_record(self) -> None:
+        def override_get_db():
+            db = self.SessionLocal()
+            try:
+                yield db
+            finally:
+                db.close()
+
+        main_module.app.dependency_overrides[main_module.get_db] = override_get_db
+        try:
+            client = TestClient(main_module.app)
+            analysis = client.post(
+                "/api/lead-monitor/analyze",
+                json={
+                    "source_type": "reddit",
+                    "source_url": "https://example.com/thread",
+                    "raw_text": "Any independent agent recommendations for car insurance in Bend 97701?",
+                },
+            )
+            self.assertEqual(analysis.status_code, 200)
+
+            saved = client.post(
+                "/api/lead-monitor/leads",
+                json={
+                    "source_type": "reddit",
+                    "source_url": "https://example.com/thread",
+                    "raw_text": "Any independent agent recommendations for car insurance in Bend 97701?",
+                    "analysis": analysis.json(),
+                },
+            )
+            self.assertEqual(saved.status_code, 200)
+            payload = saved.json()
+            self.assertEqual(payload["source_type"], "reddit")
+            self.assertEqual(payload["lead_type"], "auto insurance")
+            self.assertEqual(payload["status"], "new")
+
+            with self.SessionLocal() as db:
+                self.assertEqual(db.query(CrmLeadSignal).count(), 1)
+        finally:
+            main_module.app.dependency_overrides.pop(main_module.get_db, None)
+
+    def test_lead_monitor_attaches_to_existing_customer_activity_without_duplicate(self) -> None:
+        def override_get_db():
+            db = self.SessionLocal()
+            try:
+                yield db
+            finally:
+                db.close()
+
+        main_module.app.dependency_overrides[main_module.get_db] = override_get_db
+        try:
+            client = TestClient(main_module.app)
+            inbound = client.post(
+                "/api/inbound",
+                json={
+                    "phone": "(503) 555-4141",
+                    "name": "Jordan Lee",
+                    "email": "jordan@example.com",
+                    "message": "Existing customer conversation",
+                },
+            )
+            self.assertEqual(inbound.status_code, 200)
+            contact_id = inbound.json()["contact_id"]
+
+            saved = client.post(
+                "/api/lead-monitor/leads",
+                json={
+                    "source_type": "facebook",
+                    "source_url": "https://example.com/post",
+                    "raw_text": "Jordan asked for an insurance quote in Salem.",
+                },
+            )
+            self.assertEqual(saved.status_code, 200)
+            lead_id = saved.json()["id"]
+
+            attached = client.post(
+                f"/api/lead-monitor/leads/{lead_id}/attach-customer",
+                json={"contact_id": contact_id},
+            )
+            self.assertEqual(attached.status_code, 200)
+            self.assertEqual(attached.json()["lead"]["attached_contact_id"], contact_id)
+
+            with self.SessionLocal() as db:
+                self.assertEqual(db.query(CrmContact).filter(CrmContact.mobile_phone == "+15035554141").count(), 1)
+                activity = (
+                    db.query(CrmActivity)
+                    .filter(CrmActivity.contact_id == contact_id, CrmActivity.activity_type == "lead_signal.attached")
+                    .one()
+                )
+                self.assertIn("Jordan asked for an insurance quote", activity.body)
+                self.assertIn("https://example.com/post", activity.metadata_json)
         finally:
             main_module.app.dependency_overrides.pop(main_module.get_db, None)
 

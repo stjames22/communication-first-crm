@@ -63,7 +63,7 @@ from .schemas import (
 )
 from .settings import get_settings, refresh_settings, runtime_openai_api_key
 from .storage import storage
-from modules.communication_crm import create_crm_tables, crm_router
+from modules.communication_crm import create_crm_tables, crm_router, lead_monitor_router
 from modules.communication_crm import crm_service
 
 settings = get_settings()
@@ -301,6 +301,7 @@ def require_estimator_access(
 
 
 app.include_router(crm_router, prefix="/crm", dependencies=[Depends(require_api_key)])
+app.include_router(lead_monitor_router, dependencies=[Depends(require_api_key)])
 
 
 @app.post("/api/inbound")
