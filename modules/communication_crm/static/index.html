@@ -4,6 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Communication First CRM</title>
+  <link rel="icon" href="data:," />
   <link rel="stylesheet" href="/crm/static/styles.css" />
 </head>
 <body>
@@ -16,23 +17,28 @@
         </div>
         <button id="seed" class="ghost-button" type="button">Demo Data</button>
       </header>
+      <div class="search-wrap">
+        <input id="conversation-search" type="search" autocomplete="off" placeholder="Search customers, phone, email, messages" aria-label="Search conversations" />
+      </div>
       <div id="conversations" class="conversation-list" aria-live="polite">
         <article class="empty-state">Loading conversations...</article>
       </div>
     </section>
 
-    <section class="thread-pane" aria-label="Active conversation">
+    <section class="thread-pane" aria-label="Customer workspace">
       <header class="thread-header">
         <div>
-          <p id="thread-kicker" class="eyebrow">Select a conversation</p>
-          <h2 id="thread-title">Conversation</h2>
+          <p id="workspace-kicker" class="eyebrow">Select a customer</p>
+          <h2 id="workspace-title">Customer Workspace</h2>
         </div>
-        <div id="thread-meta" class="thread-meta"></div>
+        <div id="workspace-meta" class="thread-meta"></div>
       </header>
 
       <div id="thread" class="thread" aria-live="polite">
         <article class="empty-state">Choose a conversation to see the thread.</article>
       </div>
+
+      <div id="quote-cta" class="quote-cta" aria-live="polite"></div>
 
       <div class="quick-actions" aria-label="Quick actions">
         <button type="button" data-action="send-text">Send Text</button>
