@@ -54,7 +54,7 @@ $("#conversation-search").addEventListener("input", (event) => {
 
 loadInbox();
 
-async function loadInbox({ keepSelection = true } = {}) {
+async function loadInbox({ keepSelection = true, preferredConversationId = null } = {}) {
   state.loadingInbox = true;
   state.error = "";
   renderInbox();
@@ -62,7 +62,9 @@ async function loadInbox({ keepSelection = true } = {}) {
   try {
     const conversations = await getJson("/crm/api/conversations");
     state.conversations = conversations.map(normalizeConversation);
-    if (!keepSelection || !state.conversations.some((item) => item.id === state.selectedConversationId)) {
+    if (preferredConversationId && state.conversations.some((item) => item.id === preferredConversationId)) {
+      state.selectedConversationId = preferredConversationId;
+    } else if (!keepSelection || !state.conversations.some((item) => item.id === state.selectedConversationId)) {
       state.selectedConversationId = filteredConversations()[0]?.id || state.conversations[0]?.id || null;
     }
     state.loadingInbox = false;
@@ -85,8 +87,8 @@ async function selectConversation(conversationId, options = {}) {
   if (!conversationId) return;
   if (
     options.skipIfCurrentLoaded &&
-    state.conversationDetail?.conversation?.id === conversationId &&
-    state.contactDetail?.contact
+    activeDetail()?.conversation?.id === conversationId &&
+    activeContact()
   ) {
     renderAll();
     return;
@@ -103,14 +105,14 @@ async function selectConversation(conversationId, options = {}) {
 
   try {
     const detail = await getJson(`/crm/api/conversations/${encodeURIComponent(conversationId)}`);
-    if (requestId !== state.requestId) return;
+    if (requestId !== state.requestId || state.selectedConversationId !== conversationId) return;
 
     const contactId = detail?.contact?.id || detail?.conversation?.contact_id || state.selectedContactId;
     const contactDetail = contactId ? await getJson(`/crm/api/contacts/${encodeURIComponent(contactId)}`) : null;
-    if (requestId !== state.requestId) return;
+    if (requestId !== state.requestId || state.selectedConversationId !== conversationId) return;
 
     state.conversationDetail = detail;
-    state.contactDetail = contactDetail;
+    state.contactDetail = contactDetail?.contact?.id === contactId ? contactDetail : null;
     state.selectedContactId = contactId || null;
     state.conversations = state.conversations.map((item) =>
       item.id === conversationId
@@ -182,13 +184,16 @@ function renderInbox() {
 }
 
 function renderConversation() {
-  const contact = activeContact();
-  const detail = state.conversationDetail;
+  const detail = activeDetail();
+  const contact = workspaceContact();
+  const selected = conversationById(state.selectedConversationId);
+  const summary = detail?.conversation?.front_desk_summary;
+  const channel = detail?.conversation?.channel_type || selected?.channel_type;
 
-  $("#workspace-title").textContent = contact?.display_name || "Conversation";
-  $("#workspace-kicker").textContent = state.loadingConversation ? "Loading" : detail ? "Open conversation" : "Select a message";
+  $("#workspace-title").textContent = contact?.display_name || "Customer Workspace";
+  $("#workspace-kicker").textContent = state.loadingConversation ? "Loading" : detail ? "Customer Workspace" : "Select a message";
   $("#workspace-meta").innerHTML = contact
-    ? [contact.mobile_phone, contact.email].filter(Boolean).map((item) => `<span>${esc(item)}</span>`).join("")
+    ? [contact.mobile_phone, contact.email, channelLabel(channel)].filter(Boolean).map((item) => `<span>${esc(item)}</span>`).join("")
     : "";
 
   if (state.loadingConversation) {
@@ -208,24 +213,31 @@ function renderConversation() {
   }
 
   const messages = Array.isArray(detail.messages) ? detail.messages : [];
+  const workspaceSummary = workspaceSummaryMarkup(contact, summary);
   if (!messages.length) {
-    $("#thread").innerHTML = `<article class="empty-state">No messages in this conversation.</article>`;
+    $("#thread").innerHTML = `${workspaceSummary}<article class="empty-state">No messages in this conversation.</article>`;
   } else {
-    $("#thread").innerHTML = messages.map((message) => `
+    $("#thread").innerHTML = `
+      ${workspaceSummary}
+      <div class="message-stack">
+        ${messages.map((message) => `
       <article class="message ${esc(message.direction)}">
         <p>${esc(message.body)}</p>
         <small>${esc(directionLabel(message.direction))} ${esc(fmt(message.created_at))}</small>
       </article>
-    `).join("");
+        `).join("")}
+      </div>
+    `;
     $("#thread").scrollTop = $("#thread").scrollHeight;
   }
   setComposerDisabled(state.sending);
 }
 
 function renderContext() {
-  const contact = activeContact();
-  const detail = state.conversationDetail;
-  const timeline = dedupeById(state.contactDetail?.timeline || detail?.timeline || []);
+  const detail = activeDetail();
+  const contact = workspaceContact();
+  const contactDetail = activeContactDetail();
+  const timeline = dedupeById(contactDetail?.timeline || detail?.timeline || []);
   const lastInbound = lastMessage("inbound");
   const lastOutbound = lastMessage("outbound");
   const frontDeskSummary = detail?.conversation?.front_desk_summary;
@@ -234,7 +246,7 @@ function renderContext() {
     $("#summary").innerHTML = loadingState("Loading context...");
     return;
   }
-  if (!detail || !contact) {
+  if (!detail) {
     $("#summary").innerHTML = `<article class="empty-state">Select a message to see the essentials.</article>`;
     return;
   }
@@ -305,7 +317,7 @@ async function sendReply(event) {
     toast(error.message || "Reply could not be sent.");
   } finally {
     state.sending = false;
-    setComposerDisabled(!state.conversationDetail);
+    setComposerDisabled(!activeDetail());
     focusComposer();
   }
 }
@@ -331,7 +343,7 @@ async function draftReply() {
   } catch (error) {
     toast(error.message || "Draft could not be created.");
   } finally {
-    button.disabled = !state.conversationDetail;
+    button.disabled = !activeDetail();
   }
 }
 
@@ -341,12 +353,12 @@ async function refreshConversation(conversationId) {
     getJson(`/crm/api/conversations/${encodeURIComponent(conversationId)}`),
     getJson("/crm/api/conversations")
   ]);
-  if (requestId !== state.requestId) return;
+  if (requestId !== state.requestId || state.selectedConversationId !== conversationId) return;
   const contactId = detail?.contact?.id || detail?.conversation?.contact_id;
   const contactDetail = contactId ? await getJson(`/crm/api/contacts/${encodeURIComponent(contactId)}`) : null;
-  if (requestId !== state.requestId) return;
+  if (requestId !== state.requestId || state.selectedConversationId !== conversationId) return;
   state.conversationDetail = detail;
-  state.contactDetail = contactDetail;
+  state.contactDetail = contactDetail?.contact?.id === contactId ? contactDetail : null;
   state.selectedContactId = contactId || null;
   state.conversations = conversations.map(normalizeConversation);
   renderAll();
@@ -378,8 +390,7 @@ async function simulateIncomingMessage() {
   button.disabled = true;
   try {
     const result = await postJson("/api/inbound/message", payload);
-    await loadInbox({ keepSelection: true });
-    await selectConversation(result.conversation_id);
+    await loadInbox({ keepSelection: false, preferredConversationId: result.conversation_id });
     toast(result.auto_replied ? "Incoming message handled and auto-replied." : "Incoming message added for staff reply.");
   } catch (error) {
     toast(error.message || "Incoming message could not be simulated.");
@@ -422,8 +433,46 @@ function conversationById(id) {
   return state.conversations.find((item) => item.id === id) || null;
 }
 
+function activeDetail() {
+  return state.conversationDetail?.conversation?.id === state.selectedConversationId ? state.conversationDetail : null;
+}
+
+function activeContactDetail() {
+  const detail = activeDetail();
+  if (!detail?.contact?.id) return null;
+  return state.contactDetail?.contact?.id === detail.contact.id ? state.contactDetail : null;
+}
+
 function activeContact() {
-  return state.contactDetail?.contact || state.conversationDetail?.contact || null;
+  const detail = activeDetail();
+  return detail?.contact || null;
+}
+
+function workspaceContact() {
+  const contact = activeContact();
+  const selected = conversationById(state.selectedConversationId);
+  return contact || selected || null;
+}
+
+function workspaceSummaryMarkup(contact, summary) {
+  const missingDetails = !contact?.email || !contact?.mobile_phone;
+  return `
+    <section class="workspace-snapshot">
+      <div>
+        <span class="snapshot-label">Intent</span>
+        <strong>${esc(summary?.intent || "Needs review")}</strong>
+      </div>
+      <div>
+        <span class="snapshot-label">Status</span>
+        <strong>${esc(summary?.status || "Open")}</strong>
+      </div>
+      <div>
+        <span class="snapshot-label">Next</span>
+        <strong>${esc(summary?.next_action || "Reply to customer")}</strong>
+      </div>
+      ${missingDetails ? `<p class="details-prompt">Add customer details</p>` : ""}
+    </section>
+  `;
 }
 
 function clearConversation() {
@@ -440,13 +489,13 @@ function setComposerDisabled(disabled) {
 }
 
 function focusComposer() {
-  if (!state.conversationDetail || state.sending) return;
+  if (!activeDetail() || state.sending) return;
   const input = $("#message-form").elements.body;
   input.focus();
 }
 
 function lastMessage(direction) {
-  const messages = state.conversationDetail?.messages || [];
+  const messages = activeDetail()?.messages || [];
   return [...messages].reverse().find((message) => String(message.direction || "").toLowerCase() === direction) || null;
 }
 
