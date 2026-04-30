@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Communication First CRM</title>
+  <title>Communication Hub</title>
   <link rel="icon" href="data:," />
   <link rel="stylesheet" href="/crm/static/styles.css" />
 </head>
@@ -12,16 +12,12 @@
     <section class="inbox-pane" aria-label="Unified inbox">
       <header class="pane-header">
         <div>
-          <p class="eyebrow">Communication First CRM</p>
+          <p class="eyebrow">Communication Hub</p>
           <h1>Inbox</h1>
-        </div>
-        <div class="header-actions">
-          <a class="nav-link" href="/lead-monitor">Lead Monitor</a>
-          <button id="seed" class="ghost-button" type="button">Demo Data</button>
         </div>
       </header>
       <div class="search-wrap">
-        <input id="conversation-search" type="search" autocomplete="off" placeholder="Search customers, phone, email, messages" aria-label="Search conversations" />
+        <input id="conversation-search" type="search" autocomplete="off" placeholder="Search inbox" aria-label="Search conversations" />
       </div>
       <div id="conversations" class="conversation-list" aria-live="polite">
         <article class="empty-state">Loading conversations...</article>
@@ -32,7 +28,7 @@
       <header class="thread-header">
         <div>
           <p id="workspace-kicker" class="eyebrow">Select a customer</p>
-          <h2 id="workspace-title">Customer Workspace</h2>
+          <h2 id="workspace-title">Conversation</h2>
         </div>
         <div id="workspace-meta" class="thread-meta"></div>
       </header>
@@ -41,13 +37,8 @@
         <article class="empty-state">Choose a conversation to see the thread.</article>
       </div>
 
-      <div id="quote-cta" class="quote-cta" aria-live="polite"></div>
-
       <div class="quick-actions" aria-label="Quick actions">
-        <button type="button" data-action="send-text">Send Text</button>
-        <button type="button" data-action="log-call">Log Call</button>
-        <button type="button" data-action="follow-up">Create Follow-up</button>
-        <button type="button" data-action="quote">Create Quote</button>
+        <button id="draft-reply" type="button" data-action="draft-reply">Draft reply</button>
       </div>
 
       <form id="message-form" class="composer">
@@ -60,7 +51,7 @@
       <header class="pane-header compact">
         <div>
           <p class="eyebrow">Context</p>
-          <h2>Contact</h2>
+          <h2>Now</h2>
         </div>
       </header>
       <div id="summary" class="summary" aria-live="polite">
