@@ -222,7 +222,8 @@ small,
 .channel-badge,
 .count-badge,
 .priority-badge,
-.auto-badge {
+.auto-badge,
+.status-badge {
   display: inline-flex;
   align-items: center;
   min-height: 23px;
@@ -263,6 +264,30 @@ small,
   margin-left: 6px;
   color: #315aa6;
   background: var(--email);
+}
+
+.status-badge {
+  min-height: 20px;
+  margin-left: 6px;
+  padding: 2px 7px;
+  color: #315aa6;
+  background: var(--email);
+}
+
+.status-demo {
+  color: #7a3d06;
+  background: var(--accent-soft);
+}
+
+.status-live-sms,
+.status-sent {
+  color: var(--sms-ink);
+  background: var(--sms);
+}
+
+.status-failed {
+  color: var(--danger);
+  background: var(--rose-soft);
 }
 
 .thread-header {

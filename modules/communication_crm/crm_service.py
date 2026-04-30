@@ -1199,6 +1199,7 @@ def list_conversations(db: Session) -> list[dict[str, Any]]:
                 "email": conversation.contact.email,
                 "last_message_body": last_message.body if last_message else None,
                 "last_message_direction": last_message.direction if last_message else None,
+                "last_message_delivery_status": last_message.delivery_status if last_message else None,
                 "matched_existing_contact": summary.get("priority") in {"existing_contact", "matched_contact"},
                 "match_type": summary.get("match_type"),
                 "priority": summary.get("priority"),

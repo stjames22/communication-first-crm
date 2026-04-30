@@ -1,0 +1,291 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Northwestern Traffic CRM Preview</title>
+  <link rel="stylesheet" href="northwestern-traffic-crm/assets/admin.css">
+  <style>
+    body {
+      background: #f0f0f1;
+      color: #1d2327;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin: 0;
+    }
+
+    .preview-shell {
+      display: grid;
+      grid-template-columns: 190px minmax(0, 1fr);
+      min-height: 100vh;
+    }
+
+    .preview-sidebar {
+      background: #1d2327;
+      color: #f0f0f1;
+      padding: 18px 0;
+    }
+
+    .preview-brand {
+      font-size: 13px;
+      font-weight: 700;
+      padding: 0 18px 18px;
+    }
+
+    .preview-nav {
+      display: grid;
+      gap: 2px;
+    }
+
+    .preview-nav span {
+      color: #c3c4c7;
+      display: block;
+      padding: 10px 18px;
+    }
+
+    .preview-nav .active {
+      background: #2271b1;
+      color: #fff;
+    }
+
+    .preview-main {
+      padding: 0 28px 28px;
+    }
+
+    .button,
+    .button-primary {
+      align-items: center;
+      border: 1px solid #2271b1;
+      border-radius: 3px;
+      box-sizing: border-box;
+      cursor: default;
+      display: inline-flex;
+      font-size: 13px;
+      min-height: 30px;
+      padding: 0 10px;
+      text-decoration: none;
+    }
+
+    .button-primary {
+      background: #2271b1;
+      color: #fff;
+    }
+
+    .widefat {
+      border-collapse: collapse;
+      width: 100%;
+    }
+
+    .widefat th,
+    .widefat td {
+      border-bottom: 1px solid #dcdcde;
+      padding: 10px;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    .widefat th {
+      color: #2c3338;
+      font-weight: 600;
+    }
+
+    .widefat tr:nth-child(even) td {
+      background: #f6f7f7;
+    }
+
+    code {
+      background: #f6f7f7;
+      border: 1px solid #dcdcde;
+      border-radius: 3px;
+      padding: 2px 5px;
+    }
+
+    @media (max-width: 820px) {
+      .preview-shell {
+        grid-template-columns: 1fr;
+      }
+
+      .preview-sidebar {
+        display: none;
+      }
+
+      .preview-main {
+        padding: 0 16px 20px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="preview-shell">
+    <aside class="preview-sidebar">
+      <div class="preview-brand">WordPress Admin</div>
+      <nav class="preview-nav">
+        <span>Dashboard</span>
+        <span>Posts</span>
+        <span>Pages</span>
+        <span class="active">Traffic CRM</span>
+        <span>Contacts</span>
+        <span>Easy Links</span>
+        <span>Settings</span>
+      </nav>
+    </aside>
+
+    <main class="preview-main">
+      <div class="wrap nwtc-wrap">
+        <header class="nwtc-header">
+          <div>
+            <p>Northwestern Insurance Group</p>
+            <h1>Traffic CRM Dashboard</h1>
+          </div>
+          <a class="button button-primary">Add Contact</a>
+        </header>
+
+        <section class="nwtc-grid nwtc-metrics">
+          <article class="nwtc-card">
+            <span>Visits, 30 days</span>
+            <strong>1,284</strong>
+          </article>
+          <article class="nwtc-card">
+            <span>Unique visitors</span>
+            <strong>742</strong>
+          </article>
+          <article class="nwtc-card">
+            <span>Tracked clicks</span>
+            <strong>193</strong>
+          </article>
+          <article class="nwtc-card">
+            <span>Open contacts</span>
+            <strong>28</strong>
+          </article>
+        </section>
+
+        <section class="nwtc-columns">
+          <article class="nwtc-panel">
+            <h2>Top pages</h2>
+            <table class="widefat striped">
+              <thead><tr><th>Page</th><th>Views</th></tr></thead>
+              <tbody>
+                <tr><td>Medicare Supplement Quote</td><td>418</td></tr>
+                <tr><td>Auto & Home Bundle</td><td>302</td></tr>
+                <tr><td>Life Insurance Planning</td><td>224</td></tr>
+                <tr><td>Contact Northwestern Team</td><td>119</td></tr>
+              </tbody>
+            </table>
+          </article>
+
+          <article class="nwtc-panel">
+            <h2>Traffic sources</h2>
+            <table class="widefat striped">
+              <thead><tr><th>Source</th><th>Views</th></tr></thead>
+              <tbody>
+                <tr><td>direct / unknown</td><td>524</td></tr>
+                <tr><td>google</td><td>386</td></tr>
+                <tr><td>facebook</td><td>203</td></tr>
+                <tr><td>spring-mailer</td><td>171</td></tr>
+              </tbody>
+            </table>
+          </article>
+        </section>
+
+        <section class="nwtc-columns">
+          <article class="nwtc-panel">
+            <h2>Easy Link performance</h2>
+            <table class="widefat striped">
+              <thead><tr><th>Link</th><th>Campaign</th><th>Clicks</th></tr></thead>
+              <tbody>
+                <tr><td>Get a Quote</td><td>spring-mailer</td><td>84</td></tr>
+                <tr><td>Schedule Review</td><td>policy-review</td><td>51</td></tr>
+                <tr><td>Medicare Consult</td><td>google</td><td>39</td></tr>
+              </tbody>
+            </table>
+          </article>
+
+          <article class="nwtc-panel">
+            <h2>Contact pipeline</h2>
+            <div class="nwtc-pipeline">
+              <div class="nwtc-pipeline-item"><span>Lead</span><strong>14</strong></div>
+              <div class="nwtc-pipeline-item"><span>Follow-up</span><strong>7</strong></div>
+              <div class="nwtc-pipeline-item"><span>Quoted</span><strong>5</strong></div>
+              <div class="nwtc-pipeline-item"><span>Client</span><strong>2</strong></div>
+            </div>
+          </article>
+        </section>
+
+        <section class="nwtc-panel">
+          <h2>Recent contacts</h2>
+          <table class="widefat striped">
+            <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Status</th><th>Source</th></tr></thead>
+            <tbody>
+              <tr>
+                <td>Pat Morgan</td>
+                <td>pat@example.com</td>
+                <td>(312) 555-0198</td>
+                <td><span class="nwtc-status">lead</span></td>
+                <td>quote-request</td>
+              </tr>
+              <tr>
+                <td>Jamie Lee</td>
+                <td>jamie@example.com</td>
+                <td>(847) 555-0164</td>
+                <td><span class="nwtc-status">follow_up</span></td>
+                <td>website</td>
+              </tr>
+              <tr>
+                <td>Robin Carter</td>
+                <td>robin@example.com</td>
+                <td>(708) 555-0107</td>
+                <td><span class="nwtc-status">quoted</span></td>
+                <td>referral</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section class="nwtc-panel">
+          <h2>Recent communications</h2>
+          <ol class="nwtc-timeline">
+            <li>
+              <strong>Pat Morgan · Call</strong>
+              <time>April 30, 2026 10:25 AM</time>
+              <p>Requested a comparison between current homeowners policy and bundled auto/home quote.</p>
+            </li>
+            <li>
+              <strong>Jamie Lee · Task</strong>
+              <time>April 30, 2026 9:10 AM</time>
+              <p>Follow up after lunch with revised life insurance estimate and appointment options.</p>
+            </li>
+          </ol>
+        </section>
+
+        <section class="nwtc-columns">
+          <article class="nwtc-panel">
+            <h2>Easy Links</h2>
+            <table class="widefat striped">
+              <thead><tr><th>Label</th><th>Shortcode</th><th>Clicks</th></tr></thead>
+              <tbody>
+                <tr><td>Get a Quote</td><td><code>[nw_easy_link key="quote-request"]</code></td><td>84</td></tr>
+                <tr><td>Schedule Review</td><td><code>[nw_easy_link key="policy-review"]</code></td><td>51</td></tr>
+              </tbody>
+            </table>
+          </article>
+
+          <article class="nwtc-panel">
+            <h2>Communication timeline</h2>
+            <ol class="nwtc-timeline">
+              <li>
+                <strong>Call</strong>
+                <time>April 29, 2026 9:15 AM</time>
+                <p>Left voicemail about Medicare supplement quote options.</p>
+              </li>
+              <li>
+                <strong>Email</strong>
+                <time>April 28, 2026 4:40 PM</time>
+                <p>Sent intake checklist and appointment link.</p>
+              </li>
+            </ol>
+          </article>
+        </section>
+      </div>
+    </main>
+  </div>
+</body>
+</html>

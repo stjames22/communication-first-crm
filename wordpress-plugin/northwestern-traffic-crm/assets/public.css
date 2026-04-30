@@ -1,0 +1,52 @@
+.nwtc-lead-form {
+    border: 1px solid #d8dee7;
+    border-radius: 8px;
+    box-sizing: border-box;
+    display: grid;
+    gap: 14px;
+    max-width: 620px;
+    padding: 20px;
+}
+
+.nwtc-lead-form label {
+    display: grid;
+    font-weight: 700;
+    gap: 6px;
+}
+
+.nwtc-lead-form span {
+    font-size: 14px;
+}
+
+.nwtc-lead-form input,
+.nwtc-lead-form textarea {
+    border: 1px solid #b8c1cc;
+    border-radius: 4px;
+    box-sizing: border-box;
+    font: inherit;
+    padding: 10px 12px;
+    width: 100%;
+}
+
+.nwtc-lead-form button,
+.nw-easy-link {
+    align-items: center;
+    background: #1f6fb2;
+    border: 1px solid #1f6fb2;
+    border-radius: 4px;
+    color: #fff;
+    display: inline-flex;
+    font: inherit;
+    font-weight: 700;
+    justify-content: center;
+    min-height: 42px;
+    padding: 0 16px;
+    text-decoration: none;
+}
+
+.nwtc-lead-form button:hover,
+.nw-easy-link:hover {
+    background: #155d96;
+    border-color: #155d96;
+    color: #fff;
+}

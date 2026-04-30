@@ -177,6 +177,7 @@ function renderInbox() {
         <div class="conversation-footline">
           ${unread ? `<span class="count-badge">${unread}</span>` : ""}
           <span>${esc(channelLabel(item.channel_type))}</span>
+          ${item.last_message_delivery_status ? `<span class="status-badge ${esc(statusClass(item.last_message_delivery_status))}">${esc(statusLabel(item.last_message_delivery_status))}</span>` : ""}
         </div>
       </article>
     `;
@@ -228,7 +229,7 @@ function renderConversation() {
         ${messages.map((message) => `
       <article class="message ${esc(message.direction)}">
         <p>${esc(message.body)}</p>
-        <small>${esc(directionLabel(message.direction))} ${esc(fmt(message.created_at))}</small>
+        <small>${esc(directionLabel(message.direction))} ${esc(fmt(message.created_at))} <span class="status-badge ${esc(statusClass(message.delivery_status))}">${esc(statusLabel(message.delivery_status))}</span></small>
       </article>
         `).join("")}
       </div>
@@ -313,10 +314,10 @@ async function sendReply(event) {
   state.sending = true;
   setComposerDisabled(true);
   try {
-    await postJson(`/crm/api/conversations/${encodeURIComponent(conversationId)}/messages`, { body });
+    const result = await postJson("/api/twilio/sms/send", { conversation_id: conversationId, body });
     input.value = "";
     await refreshConversation(conversationId);
-    toast("Reply sent and logged.");
+    toast(result.warning || "Reply sent and logged.");
   } catch (error) {
     toast(error.message || "Reply could not be sent.");
   } finally {
@@ -433,7 +434,8 @@ function normalizeConversation(item) {
     ...item,
     display_name: item.display_name || item.contact?.display_name || "Unknown customer",
     mobile_phone: item.mobile_phone || item.contact?.mobile_phone || "",
-    email: item.email || item.contact?.email || ""
+    email: item.email || item.contact?.email || "",
+    last_message_delivery_status: item.last_message_delivery_status || item.delivery_status || ""
   };
 }
 
@@ -582,6 +584,21 @@ function channelLabel(value) {
 
 function directionLabel(value) {
   return String(value || "").toLowerCase() === "outbound" ? "Sent" : "Received";
+}
+
+function statusLabel(value) {
+  const normalized = String(value || "").toLowerCase();
+  if (normalized === "demo" || normalized === "mock_sent" || normalized === "system_generated") return "demo";
+  if (normalized === "sent" || normalized === "delivered") return "sent";
+  if (normalized === "failed" || normalized === "undelivered") return "failed";
+  if (normalized === "received") return "live sms";
+  if (normalized === "auto_replied") return "demo";
+  return normalized || "pending";
+}
+
+function statusClass(value) {
+  const label = statusLabel(value).replace(/\s+/g, "-");
+  return `status-${label}`;
 }
 
 function activityType(value) {

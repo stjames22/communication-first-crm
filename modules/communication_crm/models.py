@@ -225,8 +225,27 @@ class CrmLeadSignal(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
 
+class CrmWebsiteEvent(Base):
+    __tablename__ = "crm_website_events"
+
+    id = Column(String(36), primary_key=True, default=_uuid)
+    event_type = Column(String(40), nullable=False, index=True)
+    source_system = Column(String(80), nullable=False, default="wordpress", index=True)
+    page_url = Column(String(512), nullable=True)
+    page_title = Column(String(255), nullable=True)
+    referrer = Column(String(512), nullable=True)
+    link_key = Column(String(120), nullable=True, index=True)
+    link_label = Column(String(190), nullable=True)
+    campaign = Column(String(120), nullable=True, index=True)
+    destination_url = Column(String(512), nullable=True)
+    visitor_id_hash = Column(String(128), nullable=True, index=True)
+    metadata_json = Column(Text, nullable=False, default="{}")
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
 Index("crm_external_links_internal_idx", CrmExternalLink.internal_type, CrmExternalLink.internal_id)
 Index("crm_external_links_external_idx", CrmExternalLink.external_system, CrmExternalLink.external_id)
+Index("crm_website_events_type_created_idx", CrmWebsiteEvent.event_type, CrmWebsiteEvent.created_at)
 
 
 def create_crm_tables(bind) -> None:
@@ -245,5 +264,6 @@ def create_crm_tables(bind) -> None:
             CrmTask.__table__,
             CrmExternalLink.__table__,
             CrmLeadSignal.__table__,
+            CrmWebsiteEvent.__table__,
         ],
     )

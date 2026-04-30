@@ -21,7 +21,9 @@ function run(args) {
 }
 
 run(["-m", "scripts.init_db"]);
-run(["-m", "scripts.seed_demo"]);
+if (String(process.env.COMMUNICATION_DEMO_MODE || "true").toLowerCase() !== "false") {
+  run(["-m", "scripts.seed_demo"]);
+}
 
 const server = spawnSync(
   python,

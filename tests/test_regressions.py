@@ -60,7 +60,7 @@ from app.ai_photo_analysis import (
 from app.storage import StorageManager
 from app.settings import Settings
 from modules.communication_crm import lead_monitor_service
-from modules.communication_crm.models import CrmActivity, CrmContact, CrmLeadSignal, CrmMessage
+from modules.communication_crm.models import CrmActivity, CrmContact, CrmLeadSignal, CrmMessage, CrmWebsiteEvent
 
 
 class BarkboysRegressionTests(unittest.TestCase):
@@ -550,6 +550,85 @@ class BarkboysRegressionTests(unittest.TestCase):
                 )
                 self.assertIn("Jordan asked for an insurance quote", activity.body)
                 self.assertIn("https://example.com/post", activity.metadata_json)
+        finally:
+            main_module.app.dependency_overrides.pop(main_module.get_db, None)
+
+    def test_wordpress_sync_creates_crm_contact_message_and_event(self) -> None:
+        def override_get_db():
+            db = self.SessionLocal()
+            try:
+                yield db
+            finally:
+                db.close()
+
+        main_module.app.dependency_overrides[main_module.get_db] = override_get_db
+        try:
+            client = TestClient(main_module.app)
+            response = client.post(
+                "/api/wp/lead",
+                json={
+                    "name": "Casey Morgan",
+                    "email": "casey@example.com",
+                    "phone": "(503) 555-0188",
+                    "source": "homepage",
+                    "page_url": "https://example.com/insurance",
+                    "message": "Need a home insurance quote in Portland this week.",
+                    "visitor_id": "visitor-123",
+                },
+            )
+            self.assertEqual(response.status_code, 200)
+            payload = response.json()
+            self.assertEqual(payload["status"], "synced")
+            self.assertEqual(payload["contact"]["display_name"], "Casey Morgan")
+            self.assertEqual(payload["contact"]["source"], "homepage")
+            self.assertEqual(payload["event"]["event_type"], "lead_form_submit")
+
+            with self.SessionLocal() as db:
+                self.assertEqual(db.query(CrmContact).count(), 1)
+                self.assertEqual(db.query(CrmMessage).count(), 2)
+                self.assertEqual(db.query(CrmWebsiteEvent).count(), 1)
+                synced_activity = (
+                    db.query(CrmActivity)
+                    .filter(CrmActivity.activity_type == "wordpress.lead_synced")
+                    .one()
+                )
+                self.assertIn("home insurance quote", synced_activity.body)
+        finally:
+            main_module.app.dependency_overrides.pop(main_module.get_db, None)
+
+    def test_wordpress_sync_records_easy_link_click_and_dashboard_summary(self) -> None:
+        def override_get_db():
+            db = self.SessionLocal()
+            try:
+                yield db
+            finally:
+                db.close()
+
+        main_module.app.dependency_overrides[main_module.get_db] = override_get_db
+        try:
+            client = TestClient(main_module.app)
+            click = client.post(
+                "/api/wp/easy-link-click",
+                json={
+                    "link_key": "quote-request",
+                    "link_label": "Get a Quote",
+                    "campaign": "spring-mailer",
+                    "destination_url": "https://example.com/quote",
+                    "visitor_id": "visitor-456",
+                },
+            )
+            self.assertEqual(click.status_code, 200)
+            self.assertEqual(click.json()["event"]["event_type"], "easy_link_click")
+
+            summary = client.get("/api/wp/dashboard-summary")
+            self.assertEqual(summary.status_code, 200)
+            self.assertEqual(summary.json()["metrics"]["trackedClicks30Days"], 1)
+            self.assertEqual(summary.json()["topLinks"][0]["link_key"], "quote-request")
+
+            with self.SessionLocal() as db:
+                event = db.query(CrmWebsiteEvent).one()
+                self.assertEqual(event.link_key, "quote-request")
+                self.assertNotEqual(event.visitor_id_hash, "visitor-456")
         finally:
             main_module.app.dependency_overrides.pop(main_module.get_db, None)
 
