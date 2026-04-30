@@ -189,6 +189,7 @@ function renderConversation() {
   const selected = conversationById(state.selectedConversationId);
   const summary = detail?.conversation?.front_desk_summary;
   const channel = detail?.conversation?.channel_type || selected?.channel_type;
+  const summaryNode = ensureWorkspaceSummary();
 
   $("#workspace-title").textContent = contact?.display_name || "Customer Workspace";
   $("#workspace-kicker").textContent = state.loadingConversation ? "Loading" : detail ? "Customer Workspace" : "Select a message";
@@ -197,28 +198,32 @@ function renderConversation() {
     : "";
 
   if (state.loadingConversation) {
+    summaryNode.innerHTML = workspaceSummaryMarkup(contact, summary, { loading: true });
     $("#thread").innerHTML = loadingState("Opening conversation...");
     setComposerDisabled(true);
     return;
   }
   if (state.error && state.selectedConversationId) {
+    summaryNode.innerHTML = "";
     $("#thread").innerHTML = `<article class="empty-state error">${esc(state.error)}</article>`;
     setComposerDisabled(true);
     return;
   }
   if (!detail) {
+    summaryNode.innerHTML = "";
     $("#thread").innerHTML = `<article class="empty-state">Choose a message from the inbox.</article>`;
     setComposerDisabled(true);
     return;
   }
 
   const messages = Array.isArray(detail.messages) ? detail.messages : [];
-  const workspaceSummary = workspaceSummaryMarkup(contact, summary);
+  summaryNode.innerHTML = workspaceSummaryMarkup(contact, summary);
+  const timeline = conversationTimelineMarkup(messages, channel);
   if (!messages.length) {
-    $("#thread").innerHTML = `${workspaceSummary}<article class="empty-state">No messages in this conversation.</article>`;
+    $("#thread").innerHTML = `${timeline}<article class="empty-state">No messages in this conversation.</article>`;
   } else {
     $("#thread").innerHTML = `
-      ${workspaceSummary}
+      ${timeline}
       <div class="message-stack">
         ${messages.map((message) => `
       <article class="message ${esc(message.direction)}">
@@ -228,7 +233,6 @@ function renderConversation() {
         `).join("")}
       </div>
     `;
-    $("#thread").scrollTop = $("#thread").scrollHeight;
   }
   setComposerDisabled(state.sending);
 }
@@ -378,6 +382,10 @@ async function handleClick(event) {
   }
   if (action.dataset.action === "simulate-incoming") {
     await simulateIncomingMessage();
+    return;
+  }
+  if (action.dataset.action === "add-details") {
+    toast("Customer details needed.");
   }
 }
 
@@ -454,8 +462,29 @@ function workspaceContact() {
   return contact || selected || null;
 }
 
-function workspaceSummaryMarkup(contact, summary) {
+function ensureWorkspaceSummary() {
+  let node = $("#workspace-summary");
+  if (!node) {
+    node = document.createElement("section");
+    node.id = "workspace-summary";
+    node.className = "workspace-summary";
+    document.querySelector(".thread-header").after(node);
+  }
+  return node;
+}
+
+function workspaceSummaryMarkup(contact, summary, options = {}) {
   const missingDetails = !contact?.email || !contact?.mobile_phone;
+  if (options.loading) {
+    return `
+      <section class="workspace-snapshot">
+        <div><span class="snapshot-label">Intent</span><strong>Loading</strong></div>
+        <div><span class="snapshot-label">Status</span><strong>Opening</strong></div>
+        <div><span class="snapshot-label">Next</span><strong>Review message</strong></div>
+        <div><span class="snapshot-label">Details</span><strong>Checking</strong></div>
+      </section>
+    `;
+  }
   return `
     <section class="workspace-snapshot">
       <div>
@@ -470,7 +499,23 @@ function workspaceSummaryMarkup(contact, summary) {
         <span class="snapshot-label">Next</span>
         <strong>${esc(summary?.next_action || "Reply to customer")}</strong>
       </div>
-      ${missingDetails ? `<p class="details-prompt">Add customer details</p>` : ""}
+      <div>
+        <span class="snapshot-label">Details</span>
+        <strong>${missingDetails ? "Customer details needed" : "Complete"}</strong>
+      </div>
+      ${missingDetails ? `<button class="details-button" type="button" data-action="add-details">Add Details</button>` : ""}
+    </section>
+  `;
+}
+
+function conversationTimelineMarkup(messages, channel) {
+  const count = Array.isArray(messages) ? messages.length : 0;
+  return `
+    <section class="conversation-timeline" aria-label="Conversation timeline">
+      <div>
+        <h3>Conversation timeline</h3>
+        <p>${esc(count ? `${count} ${count === 1 ? "message" : "messages"} in this ${channelLabel(channel).toLowerCase()} thread` : `No messages in this ${channelLabel(channel).toLowerCase()} thread yet`)}</p>
+      </div>
     </section>
   `;
 }
