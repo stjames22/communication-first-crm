@@ -80,9 +80,26 @@ Lead submissions become CRM contacts/messages. Easy Link clicks and traffic even
 
 ## Twilio SMS
 
+Communication Hub is CRM-agnostic. The hub owns conversations, messages, phone/SMS/email/call events, front-desk summaries, and the activity timeline. CRM-specific customer, quote, job, and order behavior lives behind an adapter.
+
+Set the adapter:
+
+```bash
+COMMUNICATION_CRM_ADAPTER=local
+```
+
+Supported values:
+
+- `local`: default lightweight CRM scaffold included in this repo.
+- `barkboys`: first reference adapter scaffold for BarkBoys-style customer, site, quote, and job concepts.
+- `external`: placeholder for a customer-owned CRM integration. Implement the adapter before enabling it.
+
+Twilio, RingCentral, and future communication providers should plug into Communication Hub endpoints, not directly into a CRM. The hub then asks the configured adapter to find/create/link customer context.
+
 Set these environment variables for live SMS:
 
 ```bash
+COMMUNICATION_CRM_ADAPTER=local
 TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 TWILIO_AUTH_TOKEN=your_twilio_auth_token
 TWILIO_PHONE_NUMBER=+15551234567
@@ -104,6 +121,27 @@ python scripts/simulate_twilio_sms.py --from +15035550123 --body "Hi, I need hel
 ```
 
 When Twilio credentials are missing, outbound replies are stored in demo mode with a warning instead of sending a real SMS.
+
+## CRM Adapter Layer
+
+Adapters implement this pattern:
+
+- `find_contact(phone=None, email=None, name=None)`
+- `create_contact(payload)`
+- `update_contact(contact_id, payload)`
+- `get_contact_context(contact_id)`
+- `link_conversation(contact_id, conversation_id)`
+- `create_followup(contact_id, payload)`
+- `create_quote_or_job(contact_id, payload)` optional
+- `get_quote_or_job_context(contact_id)` optional
+
+Files:
+
+- `modules/communication_crm/crm_adapters.py`: adapter interface plus `LocalCRMAdapter`, `BarkBoysCRMAdapter`, and `ExternalCRMAdapter`.
+- `modules/communication_crm/twilio_service.py`: Twilio/RingCentral-style communication flow feeds the hub, then the hub uses the adapter to resolve customer context.
+- `modules/communication_crm/crm_service.py`: core conversation/message/timeline persistence.
+
+BarkBoys is the first reference integration. The scaffold currently maps communication contacts to local CRM contact/site/quote concepts and includes TODOs for full quote/site/job integration.
 
 ## Notes
 

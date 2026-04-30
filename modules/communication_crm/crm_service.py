@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import re
-import uuid
 from datetime import datetime, timedelta
 from decimal import Decimal
 from difflib import SequenceMatcher
@@ -11,6 +10,7 @@ from typing import Any, Optional
 from sqlalchemy import desc, func
 from sqlalchemy.orm import Session, selectinload
 
+from . import crm_adapters
 from .first_message import generate_first_message
 from .models import (
     CrmActivity,
@@ -130,88 +130,7 @@ def resolve_contact_details(
     name: Optional[str] = None,
     email: Optional[str] = None,
 ) -> dict[str, Any]:
-    normalized_phone = normalize_phone(phone)
-    normalized_email = normalize_email(email)
-    clean_name = normalize_name(name)
-    if not normalized_phone and not normalized_email and not clean_name:
-        raise ValueError("phone, email, or name is required")
-
-    contact = None
-    match_type = "created"
-    if normalized_phone:
-        contact = db.query(CrmContact).filter(CrmContact.mobile_phone == normalized_phone).first()
-        if contact:
-            match_type = "phone"
-    if contact is None and normalized_email:
-        contact = db.query(CrmContact).filter(func.lower(CrmContact.email) == normalized_email).first()
-        if contact:
-            match_type = "email"
-    if contact is None and clean_name:
-        exact_name = db.query(CrmContact).filter(func.lower(CrmContact.display_name) == clean_name.lower()).first()
-        if exact_name:
-            contact = exact_name
-            match_type = "name"
-        else:
-            for row in db.query(CrmContact).limit(300).all():
-                if _name_similarity(clean_name, row.display_name) >= 0.92:
-                    contact = row
-                    match_type = "fuzzy_name"
-                    break
-
-    if contact:
-        if clean_name and (contact.display_name == contact.mobile_phone or contact.display_name.startswith(("email:", "name:"))):
-            contact.display_name = clean_name
-        if normalized_email and not contact.email:
-            contact.email = normalized_email
-        if normalized_phone and contact.mobile_phone != normalized_phone:
-            phone_owner = db.query(CrmContact).filter(CrmContact.mobile_phone == normalized_phone).first()
-            if not phone_owner or phone_owner.id == contact.id:
-                contact.mobile_phone = normalized_phone
-    else:
-        display_name = clean_name or normalized_email or normalized_phone
-        if normalized_phone:
-            phone_value = normalized_phone
-        elif normalized_email:
-            phone_value = f"email:{normalized_email}"
-        else:
-            phone_value = f"name:{uuid.uuid4()}"
-        contact = CrmContact(
-            display_name=display_name,
-            mobile_phone=phone_value,
-            email=normalized_email,
-            status="lead",
-            source="inbound",
-        )
-        db.add(contact)
-        db.flush()
-
-    duplicate_candidates = _find_duplicate_candidates(
-        db,
-        contact=contact,
-        normalized_phone=normalized_phone,
-        normalized_email=normalized_email,
-        clean_name=clean_name,
-    )
-    warnings = []
-    if duplicate_candidates:
-        warnings.append("possible_duplicate")
-    priority = priority_for_match(match_type)
-
-    return {
-        "contact": contact,
-        "match_type": match_type,
-        "matched_existing_contact": match_type != "created",
-        "priority": priority["priority"],
-        "priority_score": priority["priority_score"],
-        "normalized": {
-            "phone": normalized_phone,
-            "email": normalized_email,
-            "name": clean_name,
-        },
-        "duplicate_warning": bool(duplicate_candidates),
-        "warnings": warnings,
-        "duplicate_candidates": [serialize_contact(candidate) for candidate in duplicate_candidates],
-    }
+    return crm_adapters.resolve_contact_details_through_adapter(db, phone=phone, name=name, email=email)
 
 
 def priority_for_match(match_type: Optional[str]) -> dict[str, Any]:
@@ -437,6 +356,7 @@ def store_inbound_message(
     created_at = datetime.utcnow()
     channel_value = str(channel or "sms").strip().lower() or "sms"
     conversation = get_or_create_conversation(db, contact.id, channel=channel_value)
+    crm_adapters.get_crm_adapter(db).link_conversation(contact.id, conversation.id)
     if resolution["priority"] == "existing_contact":
         conversation.status = "priority"
     crm_message = CrmMessage(

@@ -27,9 +27,12 @@ curl -fsS http://127.0.0.1:4174/api/health
 
 ## Twilio SMS Runtime
 
+Communication Hub is CRM-agnostic. Twilio/RingCentral feed inbound and outbound communication events into the hub. The hub owns conversations, messages, summaries, and activity. Customer-specific CRM behavior is selected with `COMMUNICATION_CRM_ADAPTER`.
+
 Configure:
 
 ```bash
+COMMUNICATION_CRM_ADAPTER=local
 TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 TWILIO_AUTH_TOKEN=your_twilio_auth_token
 TWILIO_PHONE_NUMBER=+15551234567
@@ -55,6 +58,24 @@ Local inbound simulator:
 ```bash
 python scripts/simulate_twilio_sms.py --from +15035550123 --body "Hi, I need help with a quote"
 ```
+
+## CRM Adapter Layer
+
+Available adapters:
+
+- `local`: default built-in lightweight CRM scaffold.
+- `barkboys`: reference adapter scaffold for BarkBoys customer, site, quote, and job concepts.
+- `external`: placeholder for future customer CRM integrations. Do not enable until implemented.
+
+Adapter contract:
+
+- Find/create/update contact/customer
+- Link a Communication Hub conversation to that customer
+- Provide customer context to the hub
+- Create follow-ups
+- Optionally create/link quotes, jobs, or orders
+
+BarkBoys plugs in at `modules/communication_crm/crm_adapters.py` through `BarkBoysCRMAdapter`. The remaining live integration work is to connect its TODO hooks to the BarkBoys quote/site/job contracts.
 
 ## WordPress Sync
 
