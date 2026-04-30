@@ -426,6 +426,7 @@ def store_inbound_message(
     name: Optional[str] = None,
     email: Optional[str] = None,
     channel: Optional[str] = None,
+    auto_first_message_enabled: bool = True,
 ) -> dict[str, Any]:
     body = str(message or "").strip()
     if not body:
@@ -469,7 +470,7 @@ def store_inbound_message(
         },
     )
     auto_first_message = None
-    if is_first_interaction(db, contact.id):
+    if auto_first_message_enabled and is_first_interaction(db, contact.id):
         auto_first_message = store_auto_first_message(
             db,
             contact_id=contact.id,
@@ -1106,6 +1107,28 @@ def serialize_conversation_summary(conversation: CrmConversation) -> dict[str, A
     }
 
 
+def latest_conversation_summary(db: Session, conversation_id: str) -> Optional[dict[str, Any]]:
+    activity = (
+        db.query(CrmActivity)
+        .filter(
+            CrmActivity.related_type == "conversation",
+            CrmActivity.related_id == conversation_id,
+            CrmActivity.activity_type == "conversation.summary",
+        )
+        .order_by(desc(CrmActivity.created_at))
+        .first()
+    )
+    if not activity:
+        return None
+    metadata = safe_json(activity.metadata_json)
+    return {
+        "intent": str(metadata.get("intent") or "unknown"),
+        "service": str(metadata.get("service") or "unknown"),
+        "status": str(metadata.get("status") or "new lead"),
+        "next_action": str(metadata.get("next_action") or "review message"),
+    }
+
+
 def serialize_task(task: CrmTask) -> dict[str, Any]:
     return {
         "id": task.id,
@@ -1181,6 +1204,7 @@ def list_conversations(db: Session) -> list[dict[str, Any]]:
                 "priority": summary.get("priority"),
                 "priority_score": summary.get("priority_score", 50),
                 "account_summary": summary,
+                "front_desk_summary": latest_conversation_summary(db, conversation.id),
             }
         )
     return sorted(
@@ -1208,7 +1232,10 @@ def get_conversation_detail(db: Session, conversation_id: str) -> Optional[dict[
         return None
     conversation.unread_count = 0
     return {
-        "conversation": serialize_conversation_summary(conversation),
+        "conversation": {
+            **serialize_conversation_summary(conversation),
+            "front_desk_summary": latest_conversation_summary(db, conversation.id),
+        },
         "contact": serialize_contact(conversation.contact),
         "messages": [
             {

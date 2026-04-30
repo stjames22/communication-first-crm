@@ -310,7 +310,7 @@ small,
 }
 
 .quick-actions {
-  grid-template-columns: minmax(0, 1fr);
+  grid-template-columns: repeat(2, max-content);
   padding-bottom: 0;
   border-bottom: 0;
 }
@@ -371,6 +371,30 @@ small,
   display: grid;
   gap: 3px;
   padding: 10px 0;
+}
+
+.context-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.context-list div {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 8px;
+}
+
+.context-list dt {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.context-list dd {
+  margin: 0;
+  color: #3f4b52;
 }
 
 .activity-item + .activity-item {

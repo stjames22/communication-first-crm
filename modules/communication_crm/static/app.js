@@ -8,9 +8,39 @@ const state = {
   loadingInbox: true,
   loadingConversation: false,
   sending: false,
+  simulating: false,
   error: "",
-  requestId: 0
+  requestId: 0,
+  simulationIndex: 0
 };
+
+const simulationMessages = [
+  {
+    channel: "sms",
+    from: "+15035552001",
+    message: "Hi, can I get a quote for mulch delivery this week?"
+  },
+  {
+    channel: "sms",
+    from: "+15035552002",
+    message: "What would soil delivery cost if I send my address?"
+  },
+  {
+    channel: "sms",
+    from: "+15035552003",
+    message: "Can we schedule an appointment for tomorrow afternoon?"
+  },
+  {
+    channel: "sms",
+    from: "+15035552004",
+    message: "I want to cancel my policy and talk about a claim."
+  },
+  {
+    channel: "sms",
+    from: "+15035552005",
+    message: "Do you have compost delivery available next week?"
+  }
+];
 
 const $ = (selector) => document.querySelector(selector);
 
@@ -198,6 +228,7 @@ function renderContext() {
   const timeline = dedupeById(state.contactDetail?.timeline || detail?.timeline || []);
   const lastInbound = lastMessage("inbound");
   const lastOutbound = lastMessage("outbound");
+  const frontDeskSummary = detail?.conversation?.front_desk_summary;
 
   if (state.loadingConversation) {
     $("#summary").innerHTML = loadingState("Loading context...");
@@ -219,6 +250,18 @@ function renderContext() {
       <h3>Signal</h3>
       <p>${esc(signalText(contact, detail, lastInbound, lastOutbound))}</p>
     </section>
+
+    ${frontDeskSummary ? `
+      <section class="summary-section">
+        <h3>Front desk</h3>
+        <dl class="context-list">
+          <div><dt>Intent</dt><dd>${esc(frontDeskSummary.intent)}</dd></div>
+          <div><dt>Service</dt><dd>${esc(frontDeskSummary.service)}</dd></div>
+          <div><dt>Status</dt><dd>${esc(frontDeskSummary.status)}</dd></div>
+          <div><dt>Next</dt><dd>${esc(frontDeskSummary.next_action)}</dd></div>
+        </dl>
+      </section>
+    ` : ""}
 
     <section class="summary-section">
       <h3>Last message</h3>
@@ -319,6 +362,30 @@ async function handleClick(event) {
   if (!action) return;
   if (action.dataset.action === "draft-reply") {
     await draftReply();
+    return;
+  }
+  if (action.dataset.action === "simulate-incoming") {
+    await simulateIncomingMessage();
+  }
+}
+
+async function simulateIncomingMessage() {
+  if (state.simulating) return;
+  const button = $("#simulate-message");
+  const payload = simulationMessages[state.simulationIndex % simulationMessages.length];
+  state.simulationIndex += 1;
+  state.simulating = true;
+  button.disabled = true;
+  try {
+    const result = await postJson("/api/inbound/message", payload);
+    await loadInbox({ keepSelection: true });
+    await selectConversation(result.conversation_id);
+    toast(result.auto_replied ? "Incoming message handled and auto-replied." : "Incoming message added for staff reply.");
+  } catch (error) {
+    toast(error.message || "Incoming message could not be simulated.");
+  } finally {
+    state.simulating = false;
+    button.disabled = false;
   }
 }
 

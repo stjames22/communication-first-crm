@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 
-from . import lead_monitor_service
+from . import front_desk_service, lead_monitor_service
 
 router = APIRouter()
 
@@ -62,6 +62,16 @@ def attach_lead_to_customer(lead_id: str, payload: dict = Body(...), db: Session
 @router.get("/api/lead-monitor/customers")
 def search_customers(q: str = Query(default=""), db: Session = Depends(get_db)):
     return lead_monitor_service.search_customers(db, q)
+
+
+@router.post("/api/inbound/message")
+def front_desk_inbound_message(payload: dict = Body(...), db: Session = Depends(get_db)):
+    try:
+        result = front_desk_service.handle_inbound_message(db, payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    db.commit()
+    return result
 
 
 LEAD_MONITOR_HTML = """<!doctype html>
