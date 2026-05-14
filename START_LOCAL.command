@@ -34,7 +34,7 @@ select_python_bin() {
 }
 
 if ! SELECTED_PYTHON="$(select_python_bin)"; then
-  echo "BarkBoys needs Python 3.10 or newer."
+  echo "Communication First CRM needs Python 3.10 or newer."
   echo "No compatible Python interpreter was found in this folder or on this Mac."
   exit 1
 fi
@@ -84,7 +84,7 @@ PY
   if security find-certificate -a -p /System/Library/Keychains/SystemRootCertificates.keychain > "$system_roots" 2>/dev/null \
     && [ -s "$system_roots" ]; then
     export GS_OPENAI_CA_BUNDLE="$system_roots"
-    echo "BarkBoys repaired Python HTTPS trust using macOS system roots: $GS_OPENAI_CA_BUNDLE"
+    echo "Communication First CRM repaired Python HTTPS trust using macOS system roots: $GS_OPENAI_CA_BUNDLE"
   else
     rm -f "$system_roots"
   fi
@@ -119,10 +119,10 @@ fi
 source .venv/bin/activate
 
 if ! check_python_modules python; then
-  echo "Installing Python dependencies for BarkBoys..."
+  echo "Installing Python dependencies for Communication First CRM..."
   if ! python -m pip install -r requirements.txt; then
     echo ""
-    echo "BarkBoys could not finish dependency setup."
+    echo "Communication First CRM could not finish dependency setup."
     echo "This machine needs internet access for the first run, or a prebuilt .venv copied from another Mac with the same Python version."
     echo "After connectivity is restored, rerun START_LOCAL.command."
     echo ""
@@ -132,7 +132,7 @@ fi
 
 if ! check_python_modules python; then
   echo ""
-  echo "BarkBoys dependencies are still unavailable after setup."
+  echo "Communication First CRM dependencies are still unavailable after setup."
   echo "Please verify the virtual environment in ./backend/.venv and rerun START_LOCAL.command."
   echo ""
   exit 1
@@ -140,8 +140,8 @@ fi
 
 ensure_openai_ca_bundle
 
-export GS_DATABASE_URL="${GS_DATABASE_URL:-sqlite:///./barkboys_estimator.db}"
-export GS_API_KEY="${GS_API_KEY:-barkboys-test-key}"
+export GS_DATABASE_URL="${GS_DATABASE_URL:-sqlite:///./communication_first_crm.db}"
+export GS_API_KEY="${GS_API_KEY:-communication-first-crm-test-key}"
 export GS_ESTIMATOR_USER="${GS_ESTIMATOR_USER:-demo}"
 export GS_ESTIMATOR_PASSWORD="${GS_ESTIMATOR_PASSWORD:-demo123}"
 export OPENAI_API_KEY="${OPENAI_API_KEY:-${GS_OPENAI_API_KEY:-}}"
@@ -153,20 +153,20 @@ python -m scripts.init_db
 python -m scripts.seed_demo
 
 echo ""
-echo "BarkBoys sales quote tool is starting."
-echo "Demo Hub URL: http://localhost:8000/demo"
-echo "Sales Quote Tool URL: http://localhost:8000/staff-estimator"
-echo "Public Estimator URL: http://localhost:8000/public-estimator"
-echo "Estimator login: ${GS_ESTIMATOR_USER} / ${GS_ESTIMATOR_PASSWORD}"
+echo "Communication First CRM is starting."
+echo "CRM Workspace URL: http://localhost:8000/crm/workspace"
+echo "Communication Hub URL: http://localhost:8000/crm/workspace"
+echo "Contacts and conversations: http://localhost:8000/crm/workspace"
+echo "Local login: ${GS_ESTIMATOR_USER} / ${GS_ESTIMATOR_PASSWORD}"
 echo "Database: ${GS_DATABASE_URL}"
 python -m scripts.openai_preflight || true
 LAN_IP="$(detect_lan_ip)"
 if [ -n "${LAN_IP}" ]; then
-  echo "Field test URL on same Wi-Fi: http://${LAN_IP}:8000/staff-estimator"
-  echo "Public intake on same Wi-Fi: http://${LAN_IP}:8000/public-estimator"
+  echo "Field test URL on same Wi-Fi: http://${LAN_IP}:8000/crm/workspace"
+  echo "CRM workspace on same Wi-Fi: http://${LAN_IP}:8000/crm/workspace"
   echo "If another device cannot connect, allow incoming connections for Terminal/Python in macOS Firewall."
 fi
 echo ""
 
-open "http://localhost:8000/demo" || true
+open "http://localhost:8000/crm/workspace" || true
 python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
